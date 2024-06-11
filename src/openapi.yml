@@ -1,0 +1,108 @@
+openapi: 3.0.0
+info:
+  title: User Management API
+  version: 1.0.0
+paths:
+  /users/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUser'
+      responses:
+        '200':
+          description: User registered successfully
+        '400':
+          description: Invalid user data
+        '409':
+          description: User with this login already exists
+        '500':
+          description: Internal server error
+  /users/login:
+    post:
+      summary: Log in user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginUser'
+      responses:
+        '200':
+          description: User authenticated successfully
+        '400':
+          description: Invalid user data
+        '500':
+          description: Internal server error
+  /users/update:
+    put:
+      summary: Update user data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUser'
+      responses:
+        '200':
+          description: User data updated successfully
+        '400':
+          description: Invalid user data
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+components:
+  schemas:
+    NewUser:
+      type: object
+      properties:
+        Login:
+          type: string
+          description: User's login
+          example: nickname
+        Password:
+          type: string
+          format: password
+          description: User's password
+          example: 3L45DeR
+    UpdateUser:
+      type: object
+      properties:
+        Name:
+          type: string
+          description: User's name
+          example: Ivan
+        Surname:
+          type: string
+          description: User's surname
+          example: Ivanov
+        DateOfBirth:
+          type: string
+          format: date
+          description: User's date of birth
+          example: 1999-12-31
+        Email:
+          type: string
+          format: email
+          description: User's email
+          example: address@gmail.com
+        PhoneNumber:
+          type: string
+          description: User's phone number
+          example: '+79326482233'
+    LoginUser:
+      type: object
+      properties:
+        Login:
+          type: string
+          description: User's login
+          example: nickname
+        Password:
+          type: string
+          format: password
+          description: User's password
+          example: 3L45DeR
