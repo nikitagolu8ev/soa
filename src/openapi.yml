@@ -45,7 +45,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateUser'
+              $ref: '#/components/schemas/NewPost'
       responses:
         '200':
           description: User data updated successfully
@@ -55,16 +55,113 @@ paths:
           description: Unauthorized user
         '500':
           description: Internal server error
+  /posts/create:
+    post:
+      summary: Create post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Post'
+      responses:
+        '200':
+          description: Post created successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/update/{post_id}:
+    put:
+      summary: Update post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Post'
+      responses:
+        '200':
+          description: Post updated successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/delete/{post_id}:
+    delete:
+      summary: Delete post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post deleted successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/get/{post_id}:
+    delete:
+      summary: Get post by id
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post found successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/page/{page_id}:
+    delete:
+      summary: Get posts on page
+      parameters:
+        - name: page_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Posts on page found successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+          
 components:
   schemas:
     NewUser:
       type: object
       properties:
-        Login:
+        login:
           type: string
           description: User's login
           example: nickname
-        Password:
+        password:
           type: string
           format: password
           description: User's password
@@ -72,15 +169,15 @@ components:
     UpdateUser:
       type: object
       properties:
-        Name:
+        name:
           type: string
           description: User's name
           example: Ivan
-        Surname:
+        surname:
           type: string
           description: User's surname
           example: Ivanov
-        DateOfBirth:
+        dateOfBirth:
           type: string
           format: date
           description: User's date of birth
@@ -106,3 +203,25 @@ components:
           format: password
           description: User's password
           example: 3L45DeR
+    Post:
+      type: object
+      properties:
+        Title:
+          type: string
+          description: Post's title
+          example: Title
+        Content:
+          type: string
+          description: Post's content
+          example: Some text
+    Post:
+      type: object
+      properties:
+        Title:
+          type: string
+          description: Post's title
+          example: Title
+        Content:
+          type: string
+          description: Post's content
+          example: Some text
