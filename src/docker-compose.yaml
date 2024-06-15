@@ -28,6 +28,33 @@ services:
     networks:
       - local
 
+  clickhouse:
+    image: 'bitnami/clickhouse:latest'
+    restart: on-failure:10
+    depends_on:
+      - kafka
+    ports:
+      - 8123:8123
+      - 9000:9000
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    networks:
+      - local
+
+  kafka:
+    image: 'bitnami/kafka:3.6'
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+    logging:
+      driver: none
+    networks:
+      - local
+
   main_service:
     build: 
       context: .
@@ -36,10 +63,25 @@ services:
     depends_on:
       - redis
       - post_service
+      - stat_service
     ports:
       - 4200:4200
     networks:
       - local
+
+  stat_service:
+    build: 
+      context: .
+      dockerfile: ./stat_service/Dockerfile
+    restart: on-failure:10
+    depends_on:
+      - kafka
+      - clickhouse
+    ports:
+      - 8192:8192
+    networks:
+      - local
+
 
 networks:
   local:

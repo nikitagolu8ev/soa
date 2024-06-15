@@ -80,9 +80,8 @@ func (server *PostServer) GetPostById(ctx context.Context, request *pb.GetPostBy
 	var post pb.Post
 	if err := server.DataBase.QueryRowContext(
 		ctx,
-		"SELECT post_id, title, author, content FROM posts WHERE post_id = $1 AND author = $2",
+		"SELECT post_id, title, author, content FROM posts WHERE post_id = $1",
 		request.PostId,
-		request.Author,
 	).Scan(&post.PostId, &post.Title, &post.Author, &post.Content); err != nil {
 		return nil, fmt.Errorf("failed to get post: %s", err)
 	}
@@ -93,8 +92,7 @@ func (server *PostServer) GetPostsOnPage(ctx context.Context, request *pb.GetPos
 	var posts []*pb.Post
 	rows, err := server.DataBase.QueryContext(
 		ctx,
-		"SELECT post_id, title, author, content FROM posts WHERE author = $1 LIMIT $2 OFFSET $3",
-		request.Author,
+		"SELECT post_id, title, author, content FROM posts LIMIT $1 OFFSET $2",
 		server.PostsPerPage,
 		server.PostsPerPage*uint(request.PageId),
 	)

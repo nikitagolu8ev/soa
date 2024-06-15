@@ -39,18 +39,12 @@ message DeletePostRequest {
   string Author = 2;
 }
 
-message GetPostByIdRequest {
-  uint64 PostId = 1;
-  string Author = 2;
-}
+message GetPostByIdRequest { uint64 PostId = 1; }
 
 message GetPostByIdResponse { optional Post Post = 1; }
 
-message GetPostsOnPageRequest {
-  uint64 PageId = 1;
-  string Author = 2;
-}
+message GetPostsOnPageRequest { uint64 PageId = 1; }
 
 message GetPostsOnPageResponse { repeated Post Posts = 1; }
 
-message SuccessResponse { bool successful = 1; }
+message SuccessResponse { bool Successful = 1; }

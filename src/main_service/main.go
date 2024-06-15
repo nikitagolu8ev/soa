@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	pb "proto"
 
+	"github.com/IBM/sarama"
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
@@ -34,6 +36,7 @@ type UserData struct {
 
 type MainServer struct {
 	RedisDB          *redis.Client
+	KafkaProducer    sarama.SyncProducer
 	PostServerClient pb.PostManagerClient
 	PrivateKey       *rsa.PrivateKey
 	PublicKey        *rsa.PublicKey
@@ -213,6 +216,7 @@ func (server MainServer) CreatePost(writer http.ResponseWriter, request *http.Re
 	grpc_response, err := server.PostServerClient.CreatePost(request.Context(), &grpc_request)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+		return
 	}
 
 	response, err := json.Marshal(grpc_response)
@@ -235,6 +239,7 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	body, err := io.ReadAll(request.Body)
@@ -254,9 +259,11 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 	grpc_response, err := server.PostServerClient.UpdatePost(request.Context(), &grpc_request)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+		return
 	}
 	if !grpc_response.Successful {
 		http.Error(writer, fmt.Sprintf("No post found with id : %d created by %s", post_id, login), http.StatusBadRequest)
+		return
 	}
 	writer.WriteHeader(http.StatusOK)
 }
@@ -273,6 +280,7 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	grpc_request := pb.DeletePostRequest{}
@@ -282,34 +290,31 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 	grpc_response, err := server.PostServerClient.DeletePost(request.Context(), &grpc_request)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+		return
 	}
 	if !grpc_response.Successful {
 		http.Error(writer, fmt.Sprintf("No post found with id : %d created by %s", post_id, login), http.StatusBadRequest)
+		return
 	}
 	writer.WriteHeader(http.StatusOK)
 }
 
 func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.Request) {
-	login, err := server.AuthorisedUser(request)
-	if err != nil {
-		http.Error(writer, "User is unauthorized", http.StatusUnauthorized)
-		return
-	}
-
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
 	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.Author = login
 	grpc_request.PostId = post_id
 
 	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+		return
 	}
 
 	response, err := json.Marshal(grpc_response)
@@ -321,30 +326,26 @@ func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.R
 }
 
 func (server MainServer) GetPostsOnPage(writer http.ResponseWriter, request *http.Request) {
-	login, err := server.AuthorisedUser(request)
-	if err != nil {
-		http.Error(writer, "User is unauthorized", http.StatusUnauthorized)
-		return
-	}
-
 	vars := mux.Vars(request)
 	page_id_str := vars["page_id"]
 	page_id, err := strconv.ParseUint(page_id_str, 10, 64)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("Can't parse page id: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	grpc_request := pb.GetPostsOnPageRequest{}
-	grpc_request.Author = login
 	grpc_request.PageId = page_id
 
 	grpc_response, err := server.PostServerClient.GetPostsOnPage(request.Context(), &grpc_request)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+		return
 	}
 
 	if len(grpc_response.Posts) == 0 {
-		http.Error(writer, fmt.Sprintf("No posts by author `%s` found on page %d", login, page_id), http.StatusBadRequest)
+		http.Error(writer, fmt.Sprintf("No posts found on page %d", page_id), http.StatusBadRequest)
+		return
 	}
 
 	response, err := json.Marshal(grpc_response)
@@ -353,6 +354,66 @@ func (server MainServer) GetPostsOnPage(writer http.ResponseWriter, request *htt
 		return
 	}
 	writer.Write(response)
+}
+
+func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Request) {
+	login, err := server.AuthorisedUser(request)
+	if err != nil {
+		http.Error(writer, "User is unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(request)
+	post_id_str := vars["post_id"]
+	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
+	if err != nil {
+		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// timestamp := time.Now()
+
+	message_payload := fmt.Sprint(post_id) + "," + login
+	message := &sarama.ProducerMessage{Topic: "like_topic", Value: sarama.ByteEncoder(message_payload)}
+
+	fmt.Fprintf(os.Stderr, "Start sending into kafka: %s", message_payload)
+	if _, _, err = server.KafkaProducer.SendMessage(message); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to send message to kafka: %v\n", err)
+		http.Error(writer, fmt.Sprintf("Failed to send like event to broker: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writer.WriteHeader(http.StatusOK)
+}
+
+func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Request) {
+	login, err := server.AuthorisedUser(request)
+	if err != nil {
+		http.Error(writer, "User is unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(request)
+	post_id_str := vars["post_id"]
+	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
+	if err != nil {
+		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	timestamp := time.Now()
+
+	message_payload := fmt.Sprint(post_id) + "," + login + "," + timestamp.String()
+	message := &sarama.ProducerMessage{Topic: "view_topic", Value: sarama.ByteEncoder(message_payload)}
+
+	fmt.Fprintf(os.Stderr, "Start sending into kafka: %s", message_payload)
+	if _, _, err = server.KafkaProducer.SendMessage(message); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to send message to kafka: %v\n", err)
+		http.Error(writer, fmt.Sprintf("Failed to send like event to broker: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writer.WriteHeader(http.StatusOK)
 }
 
 func main() {
@@ -374,6 +435,13 @@ func main() {
 	}
 
 	var server MainServer
+	var err error
+	server.KafkaProducer, err = sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to connect to kafka broker: %v", err)
+		os.Exit(1)
+	}
+
 	conn, err := grpc.NewClient(fmt.Sprintf("post_service:%d", *post_server_port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to post server: %v", err)
@@ -417,6 +485,8 @@ func main() {
 	router.HandleFunc("/posts/delete/{post_id}", server.DeletePost).Methods("DELETE")
 	router.HandleFunc("/posts/get/{post_id}", server.GetPostById).Methods("GET")
 	router.HandleFunc("/posts/page/{page_id}", server.GetPostsOnPage).Methods("GET")
+	router.HandleFunc("/posts/view/{post_id}", server.ViewPost).Methods("PUT")
+	router.HandleFunc("/posts/like/{post_id}", server.LikePost).Methods("PUT")
 
 	fmt.Printf("Starting serving on port: %d\n", *server_port)
 
