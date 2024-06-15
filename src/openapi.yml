@@ -63,10 +63,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Post'
+              $ref: '#/components/schemas/NewPost'
       responses:
         '200':
           description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostId'
         '400':
           description: Invalid request
         '401':
@@ -127,6 +131,10 @@ paths:
       responses:
         '200':
           description: Post found successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
         '400':
           description: Invalid request
         '401':
@@ -145,6 +153,10 @@ paths:
       responses:
         '200':
           description: Posts on page found successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
         '400':
           description: Invalid request
         '401':
@@ -203,7 +215,7 @@ components:
           format: password
           description: User's password
           example: 3L45DeR
-    Post:
+    NewPost:
       type: object
       properties:
         Title:
@@ -214,14 +226,54 @@ components:
           type: string
           description: Post's content
           example: Some text
+    PostId:
+      type: object
+      properties:
+        Title:
+          type: integer
+          desciption: Post's identifier
+          example: 32
     Post:
       type: object
       properties:
+        PostId:
+          type: integer
+          description: Post's identifier
+          example: 32
         Title:
           type: string
           description: Post's title
           example: Title
+        Author:
+          type: string
+          desciption: Post's creator login
+          example: nickname
         Content:
           type: string
           description: Post's content
           example: Some text
+    Page:
+      type: object
+      properties:
+        Posts:
+          type: array
+          desciption: Posts on page
+          items:
+            type: object
+            properties:
+              PostId:
+                type: integer
+                description: Post's identifier
+                example: 32
+              Title:
+                type: string
+                description: Post's title
+                example: Title
+              Author:
+                type: string
+                desciption: Post's creator login
+                example: nickname
+              Content:
+                type: string
+                description: Post's content
+                example: Some text
