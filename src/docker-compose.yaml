@@ -6,40 +6,40 @@ services:
     networks:
       - local
 
-  postgres:
-    container_name: postgres_posts_db
-    image: postgres:latest
-    environment:
-      POSTGRES_DB: posts_db
-      POSTGRES_USER: post_service
-      POSTGRES_PASSWORD: 'password'
-    networks:
-      - local
+  # postgres:
+  #   container_name: postgres_posts_db
+  #   image: postgres:latest
+  #   environment:
+  #     POSTGRES_DB: posts_db
+  #     POSTGRES_USER: post_service
+  #     POSTGRES_PASSWORD: 'password'
+  #   networks:
+  #     - local
 
-  post_service:
-    build: 
-      context: .
-      dockerfile: ./post_service/Dockerfile
-    restart: on-failure:10
-    depends_on:
-      - postgres
-    ports:
-      - 50051:50051
-    networks:
-      - local
+  # post_service:
+  #   build: 
+  #     context: .
+  #     dockerfile: ./post_service/Dockerfile
+  #   restart: on-failure:10
+  #   depends_on:
+  #     - postgres
+  #   ports:
+  #     - 50051:50051
+  #   networks:
+  #     - local
 
-  clickhouse:
-    image: 'bitnami/clickhouse:latest'
-    restart: on-failure:10
-    depends_on:
-      - kafka
-    ports:
-      - 8123:8123
-      - 9000:9000
-    environment:
-      - ALLOW_EMPTY_PASSWORD=yes
-    networks:
-      - local
+  # clickhouse:
+  #   image: 'bitnami/clickhouse:latest'
+  #   restart: on-failure:10
+  #   depends_on:
+  #     - kafka
+  #   ports:
+  #     - 8123:8123
+  #     - 9000:9000
+  #   environment:
+  #     - ALLOW_EMPTY_PASSWORD=yes
+  #   networks:
+  #     - local
 
   kafka:
     image: 'bitnami/kafka:3.6'
@@ -55,33 +55,33 @@ services:
     networks:
       - local
 
+  # stat_service:
+  #   build: 
+  #     context: .
+  #     dockerfile: ./stat_service/Dockerfile
+  #   restart: on-failure:10
+  #   depends_on:
+  #     - kafka
+  #     - clickhouse
+  #   ports:
+  #     - 8192:8192
+  #   networks:
+  #     - local
+
   main_service:
     build: 
       context: .
       dockerfile: ./main_service/Dockerfile
-    restart: on-failure:10
+    restart: always
     depends_on:
       - redis
-      - post_service
-      - stat_service
+      # - post_service
+      - kafka
+      # - stat_service
     ports:
       - 4200:4200
     networks:
       - local
-
-  stat_service:
-    build: 
-      context: .
-      dockerfile: ./stat_service/Dockerfile
-    restart: on-failure:10
-    depends_on:
-      - kafka
-      - clickhouse
-    ports:
-      - 8192:8192
-    networks:
-      - local
-
 
 networks:
   local:

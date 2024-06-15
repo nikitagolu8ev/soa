@@ -417,6 +417,7 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 }
 
 func main() {
+	fmt.Printf("main service started\n")
 	private_key_path := flag.String("private_key_path", "", "path to private key file")
 	public_key_path := flag.String("public_key_path", "", "path to public key file")
 	server_port := flag.Int("port", 4200, "server port")
@@ -438,8 +439,32 @@ func main() {
 	var err error
 	server.KafkaProducer, err = sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to connect to kafka broker: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to connect to kafka broker: %v\n", err)
 		os.Exit(1)
+	}
+	kafka_consumer, err := sarama.NewConsumer([]string{"kafka:9092"}, nil)
+	if err != nil {
+		fmt.Printf("kafka conumser err: %v\n", err)
+		os.Exit(1)
+	}
+	message_payload := fmt.Sprint(234) + "," + "login"
+	message := &sarama.ProducerMessage{Topic: "view_topic", Value: sarama.ByteEncoder(message_payload)}
+
+	fmt.Fprintf(os.Stderr, "Start sending into kafka: %s", message_payload)
+	patition, offset, err := server.KafkaProducer.SendMessage(message)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to send message to kafka: %v\n", err)
+		return
+	}
+
+	consumer, err := kafka_consumer.ConsumePartition("view_topic", patition, offset)
+	if err != nil {
+		fmt.Printf("2: %v", err)
+		return
+	}
+	for {
+		msg := <-consumer.Messages()
+		fmt.Printf("Consumer message: %v", msg.Value)
 	}
 
 	conn, err := grpc.NewClient(fmt.Sprintf("post_service:%d", *post_server_port), grpc.WithTransportCredentials(insecure.NewCredentials()))
