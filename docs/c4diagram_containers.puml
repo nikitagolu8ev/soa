@@ -1,0 +1,39 @@
+@startuml
+
+title Social Network Architecture
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!define DEVICONS https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/devicons
+!define DEVICONS2 https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/devicons2
+!define SPRITESURL https://raw.githubusercontent.com/plantuml-stdlib/gilbarbara-plantuml-sprites/v1.1/sprites
+
+
+!include DEVICONS/go.puml
+!include DEVICONS/postgresql.puml
+!include DEVICONS/redis.puml
+!includeurl SPRITESURL/kafka.puml
+
+Person(User, "User", "Social network's user")
+
+Container(Frontend, "Frontend", "")
+Container(MainService, "Main service", "go", "API provider, login&registration service", "go")
+Container(CommentsPostsService, "Posts service", "go", "Handling posts and comments", "go")
+Container(StatisticsService, "Statistics service", "go", "Handling likes and views", "go")
+Container(Broker, "broker", "kafka", "", "kafka")
+
+ContainerDb(AuthDB, "User data DB", "redis", "User data", "redis")
+ContainerDb(StatisticsDB, "Likes and views DB", "clickhouse", "Statistics", "redis")
+ContainerDb(CommentsPostsDB, "Posts DB", "postgres", "User posts", "postgresql")
+
+Rel(User, Frontend, "Requests")
+Rel(Frontend, MainService, "Requests", "REST API")
+
+Rel(StatisticsService, StatisticsDB, "Get statistics")
+Rel(CommentsPostsService, CommentsPostsDB, "User generated content")
+Rel(MainService, AuthDB, "User data")
+
+Rel(MainService, Broker, "Likes and views events")
+Rel(MainService, StatisticsService, "Get statistics", "grpc")
+Rel(MainService, CommentsPostsService, "User generated content", "grpc")
+Rel(Broker, StatisticsDB, "Likes and views")
+@enduml
