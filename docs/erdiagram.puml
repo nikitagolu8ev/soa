@@ -1,0 +1,49 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Social network ER diagram
+
+skinparam linetype polyline
+
+System_Boundary(MainBoundary, "Main microservice") {
+    entity User {
+        *user_id : int <<generated>>
+        --
+        *user_login : string
+        *user_password : string salted password hash (SHA3-256)
+        *user_{name, surname, date_of_birth, email, phone_number}: string
+    }
+}
+
+System_Boundary(CommentsPostsBoundary, "Posts microservice") {
+    entity Post {
+        *post_id : int <<generated>>
+        --
+        *author_id : int <<FK>>
+        --
+        *title : string
+        *content : string
+    }
+}
+
+System_Boundary(StatisticsBoundary, "Statistics microservice") {
+    entity Like {
+        *user_id : int <<FK>>
+        *post_id : int <<FK>>
+        *timestamp: timestamp
+    }
+
+    entity View {
+        *user_id : int <<FK>>
+        *post_id : int <<FK>>
+        *timestamp: timestamp
+    }
+}
+
+User ||--o{ Post
+User ||--o{ Like
+User ||--o{ View
+
+View }o--|| Post
+Like }o--|| Post
+@enduml
