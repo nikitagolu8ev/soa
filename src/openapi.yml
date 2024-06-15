@@ -1,0 +1,279 @@
+openapi: 3.0.0
+info:
+  title: User Management API
+  version: 1.0.0
+paths:
+  /users/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUser'
+      responses:
+        '200':
+          description: User registered successfully
+        '400':
+          description: Invalid user data
+        '409':
+          description: User with this login already exists
+        '500':
+          description: Internal server error
+  /users/login:
+    post:
+      summary: Log in user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginUser'
+      responses:
+        '200':
+          description: User authenticated successfully
+        '400':
+          description: Invalid user data
+        '500':
+          description: Internal server error
+  /users/update:
+    put:
+      summary: Update user data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPost'
+      responses:
+        '200':
+          description: User data updated successfully
+        '400':
+          description: Invalid user data
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/create:
+    post:
+      summary: Create post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPost'
+      responses:
+        '200':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostId'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/update/{post_id}:
+    put:
+      summary: Update post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Post'
+      responses:
+        '200':
+          description: Post updated successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/delete/{post_id}:
+    delete:
+      summary: Delete post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post deleted successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/get/{post_id}:
+    delete:
+      summary: Get post by id
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post found successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/page/{page_id}:
+    delete:
+      summary: Get posts on page
+      parameters:
+        - name: page_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Posts on page found successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+          
+components:
+  schemas:
+    NewUser:
+      type: object
+      properties:
+        login:
+          type: string
+          description: User's login
+          example: nickname
+        password:
+          type: string
+          format: password
+          description: User's password
+          example: 3L45DeR
+    UpdateUser:
+      type: object
+      properties:
+        name:
+          type: string
+          description: User's name
+          example: Ivan
+        surname:
+          type: string
+          description: User's surname
+          example: Ivanov
+        dateOfBirth:
+          type: string
+          format: date
+          description: User's date of birth
+          example: 1999-12-31
+        Email:
+          type: string
+          format: email
+          description: User's email
+          example: address@gmail.com
+        PhoneNumber:
+          type: string
+          description: User's phone number
+          example: '+79326482233'
+    LoginUser:
+      type: object
+      properties:
+        Login:
+          type: string
+          description: User's login
+          example: nickname
+        Password:
+          type: string
+          format: password
+          description: User's password
+          example: 3L45DeR
+    NewPost:
+      type: object
+      properties:
+        Title:
+          type: string
+          description: Post's title
+          example: Title
+        Content:
+          type: string
+          description: Post's content
+          example: Some text
+    PostId:
+      type: object
+      properties:
+        Title:
+          type: integer
+          desciption: Post's identifier
+          example: 32
+    Post:
+      type: object
+      properties:
+        PostId:
+          type: integer
+          description: Post's identifier
+          example: 32
+        Title:
+          type: string
+          description: Post's title
+          example: Title
+        Author:
+          type: string
+          desciption: Post's creator login
+          example: nickname
+        Content:
+          type: string
+          description: Post's content
+          example: Some text
+    Page:
+      type: object
+      properties:
+        Posts:
+          type: array
+          desciption: Posts on page
+          items:
+            type: object
+            properties:
+              PostId:
+                type: integer
+                description: Post's identifier
+                example: 32
+              Title:
+                type: string
+                description: Post's title
+                example: Title
+              Author:
+                type: string
+                desciption: Post's creator login
+                example: nickname
+              Content:
+                type: string
+                description: Post's content
+                example: Some text

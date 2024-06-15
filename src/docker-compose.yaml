@@ -1,0 +1,46 @@
+version: "3.9"
+services:
+  redis:
+    container_name: redis_user_data_db
+    image: redis:latest
+    networks:
+      - local
+
+  postgres:
+    container_name: postgres_posts_db
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: posts_db
+      POSTGRES_USER: post_service
+      POSTGRES_PASSWORD: 'password'
+    networks:
+      - local
+
+  post_service:
+    build: 
+      context: .
+      dockerfile: ./post_service/Dockerfile
+    restart: on-failure:10
+    depends_on:
+      - postgres
+    ports:
+      - 50051:50051
+    networks:
+      - local
+
+  main_service:
+    build: 
+      context: .
+      dockerfile: ./main_service/Dockerfile
+    restart: on-failure:10
+    depends_on:
+      - redis
+      - post_service
+    ports:
+      - 4200:4200
+    networks:
+      - local
+
+networks:
+  local:
+    driver: bridge
