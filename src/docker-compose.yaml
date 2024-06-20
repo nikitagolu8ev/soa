@@ -6,8 +6,6 @@ services:
       POSTGRES_DB: userdata_db
       POSTGRES_USER: main_service
       POSTGRES_PASSWORD: 'password'
-    ports:
-      - 5432:5432
     networks:
       - local
 
@@ -23,8 +21,6 @@ services:
       POSTGRES_DB: posts_db
       POSTGRES_USER: post_service
       POSTGRES_PASSWORD: 'password'
-    ports:
-      - 5432:5432
     networks:
       - local
 
@@ -34,7 +30,7 @@ services:
       dockerfile: ./post_service/Dockerfile
     restart: on-failure:10
     depends_on:
-      - postgres
+      - posts_postgres
     ports:
       - 50051:50051
     networks:
@@ -80,7 +76,7 @@ services:
     build: 
       context: .
       dockerfile: ./main_service/Dockerfile
-    restart: unless-stopped
+    restart: on-failure:10
     depends_on:
       - redis
       - post_service

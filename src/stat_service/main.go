@@ -41,6 +41,19 @@ func (server *StatServer) InitClickhouse() error {
 	}
 
 	// Like table
+	// if err = server.DataBase.Exec(context.Background(), `
+	// CREATE TABLE IF NOT EXISTS kafka_likes
+	// (
+	// 	post_id UInt64,
+	// 	user String
+	// ) ENGINE = Kafka SETTINGS kafka_broker_list = 'kafka:9092',
+	//  						  kafka_topic_list = 'like_topic',
+	// 						  kafka_group_name = 'ch_like_group',
+	// 						  kafka_format = 'CSV'
+	// `); err != nil {
+	// 	return err
+	// }
+
 	if err = server.DataBase.Exec(context.Background(), `
 	CREATE TABLE IF NOT EXISTS likes
 	(
@@ -52,6 +65,13 @@ func (server *StatServer) InitClickhouse() error {
 	`); err != nil {
 		return err
 	}
+
+	// if err = server.DataBase.Exec(context.Background(), `
+	// CREATE MATERIALIZED VIEW IF NOT EXISTS likes_consumer TO likes
+	// 	AS SELECT post_id, user, now() as timestamp from kafka_likes
+	// `); err != nil {
+	// 	return err
+	// }
 
 	// View table
 	if err = server.DataBase.Exec(context.Background(), `
@@ -124,7 +144,7 @@ func (server StatServer) GetLikes(writer http.ResponseWriter, request *http.Requ
 
 	var liked uint64
 
-	select_query := fmt.Sprintf(`SELECT count(user) AS liked FROM likes FINAL WHERE post_id == %d`, post_id)
+	select_query := fmt.Sprintf(`SELECT count(user) AS liked FROM likes FINAL WHERE post_id = %d`, post_id)
 	if eh.CheckHttp(server.DataBase.QueryRow(request.Context(), select_query).Scan(&liked), "Can't check stats", http.StatusInternalServerError, writer) {
 		return
 	}
@@ -132,7 +152,6 @@ func (server StatServer) GetLikes(writer http.ResponseWriter, request *http.Requ
 }
 
 func main() {
-	fmt.Println("Start stat service\n")
 	service_port := flag.Uint("service_port", 8192, "The stat server port")
 	kafka_port := flag.Uint("kafka_port", 9092, "The kafka broker port")
 	flag.Parse()

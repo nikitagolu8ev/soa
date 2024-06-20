@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
 	eh "error_handling"
 	pb "proto"
@@ -223,15 +222,13 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	body, err := io.ReadAll(request.Body)
-	if err != nil {
-		http.Error(writer, "Unable to read request body", http.StatusBadRequest)
+	if eh.CheckHttp(err, "Unable to read request body", http.StatusBadRequest, writer) {
 		return
 	}
 
@@ -241,17 +238,14 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	grpc_request.Author = login
-	grpc_request.PostId = post_id
+	grpc_request.PostId = uint32(post_id)
 
-	grpc_response, err := server.PostServerClient.UpdatePost(request.Context(), &grpc_request)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+	_, err = server.PostServerClient.UpdatePost(request.Context(), &grpc_request)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
 		return
 	}
-	if !grpc_response.Successful {
-		http.Error(writer, fmt.Sprintf("No post found with id : %d created by %s", post_id, login), http.StatusBadRequest)
-		return
-	}
+
 	writer.WriteHeader(http.StatusOK)
 }
 
@@ -263,22 +257,18 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
+	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.DeletePostRequest{}
 	grpc_request.Author = login
-	grpc_request.PostId = post_id
+	grpc_request.PostId = uint32(post_id)
 
-	grpc_response, err := server.PostServerClient.DeletePost(request.Context(), &grpc_request)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
-		return
-	}
-	if !grpc_response.Successful {
-		http.Error(writer, fmt.Sprintf("No post found with id : %d created by %s", post_id, login), http.StatusBadRequest)
+	_, err = server.PostServerClient.DeletePost(request.Context(), &grpc_request)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
 		return
 	}
 	writer.WriteHeader(http.StatusOK)
@@ -287,24 +277,22 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.PostId = post_id
+	grpc_request.PostId = uint32(post_id)
 
 	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
 		return
 	}
 
 	response, err := json.Marshal(grpc_response)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Json marshal error: %v", err), http.StatusInternalServerError)
+	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
 		return
 	}
 	writer.Write(response)
@@ -313,29 +301,26 @@ func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.R
 func (server MainServer) GetPostsOnPage(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	page_id_str := vars["page_id"]
-	page_id, err := strconv.ParseUint(page_id_str, 10, 64)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Can't parse page id: %v", err), http.StatusBadRequest)
+	page_id, err := strconv.ParseUint(page_id_str, 10, 32)
+	if eh.CheckHttp(err, "Can't parse page id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostsOnPageRequest{}
-	grpc_request.PageId = page_id
+	grpc_request.PageId = uint32(page_id)
 
 	grpc_response, err := server.PostServerClient.GetPostsOnPage(request.Context(), &grpc_request)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
 		return
 	}
 
-	if len(grpc_response.Posts) == 0 {
-		http.Error(writer, fmt.Sprintf("No posts found on page %d", page_id), http.StatusBadRequest)
+	if eh.CheckConditionHttp(len(grpc_response.Posts) == 0, fmt.Sprintf("No posts found on page `%d`", page_id), http.StatusBadRequest, writer) {
 		return
 	}
 
 	response, err := json.Marshal(grpc_response)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Json marshal error: %v", err), http.StatusInternalServerError)
+	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
 		return
 	}
 	writer.Write(response)
@@ -349,9 +334,8 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
@@ -360,8 +344,7 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 	like.UserId = login
 
 	message_payload, err := json.Marshal(like)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusInternalServerError)
+	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
 		return
 	}
 
@@ -385,18 +368,23 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
+	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
-	timestamp := time.Now()
+	var view Event
+	view.PostId = int(post_id)
+	view.UserId = login
 
-	message_payload := fmt.Sprint(post_id) + "," + login + "," + timestamp.String()
+	message_payload, err := json.Marshal(view)
+	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
+		return
+	}
+
 	message := &sarama.ProducerMessage{Topic: "view_topic", Value: sarama.ByteEncoder(message_payload)}
 
-	fmt.Fprintf(os.Stderr, "Start sending into kafka: %s", message_payload)
+	fmt.Fprintf(os.Stderr, "Start sending into kafka: %s\n", message_payload)
 	if _, _, err = server.KafkaProducer.SendMessage(message); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to send message to kafka: %v\n", err)
 		http.Error(writer, fmt.Sprintf("Failed to send like event to broker: %v", err), http.StatusInternalServerError)

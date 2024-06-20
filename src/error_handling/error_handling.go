@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func CheckNonCritical(err error, msg string) bool {
@@ -41,4 +44,19 @@ func CheckConditionHttp(cond bool, msg string, code int, writer http.ResponseWri
 		http.Error(writer, msg, code)
 	}
 	return cond
+}
+
+func GetHttpStatusFromGrpcStatus(code codes.Code) int {
+	if code == codes.Internal {
+		return http.StatusInternalServerError
+	}
+	return http.StatusBadRequest
+}
+
+func CheckGrpcHttp(err *status.Status, msg string, writer http.ResponseWriter) bool {
+	if err != nil {
+		http.Error(writer, fmt.Sprintf(msg, ": ", err.Message()), GetHttpStatusFromGrpcStatus(err.Code()))
+		return true
+	}
+	return false
 }

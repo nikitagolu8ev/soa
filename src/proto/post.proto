@@ -2,16 +2,18 @@ syntax = "proto3";
 
 option go_package = "./post";
 
+import "google/protobuf/empty.proto";
+
 service PostManager {
   rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {}
-  rpc UpdatePost(UpdatePostRequest) returns (SuccessResponse) {}
-  rpc DeletePost(DeletePostRequest) returns (SuccessResponse) {}
+  rpc UpdatePost(UpdatePostRequest) returns (google.protobuf.Empty) {}
+  rpc DeletePost(DeletePostRequest) returns (google.protobuf.Empty) {}
   rpc GetPostById(GetPostByIdRequest) returns (GetPostByIdResponse) {}
   rpc GetPostsOnPage(GetPostsOnPageRequest) returns (GetPostsOnPageResponse) {}
 }
 
 message Post {
-  uint64 PostId = 1;
+  uint32 PostId = 1;
   string Title = 2;
   string Author = 3;
   string Content = 4;
@@ -24,27 +26,25 @@ message CreatePostRequest {
 }
 
 message CreatePostResponse {
-  uint64 PostId = 1;
+  uint32 PostId = 1;
 }
 
 message UpdatePostRequest {
-  uint64 PostId = 1;
+  uint32 PostId = 1;
   string Title = 2;
   string Author = 3;
   string Content = 4;
 }
 
 message DeletePostRequest {
-  uint64 PostId = 1;
+  uint32 PostId = 1;
   string Author = 2;
 }
 
-message GetPostByIdRequest { uint64 PostId = 1; }
+message GetPostByIdRequest { uint32 PostId = 1; }
 
 message GetPostByIdResponse { Post Post = 1; }
 
-message GetPostsOnPageRequest { uint64 PageId = 1; }
+message GetPostsOnPageRequest { uint32 PageId = 1; }
 
 message GetPostsOnPageResponse { repeated Post Posts = 1; }
-
-message SuccessResponse { bool Successful = 1; }

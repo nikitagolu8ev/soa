@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type PostServer struct {
@@ -23,7 +24,7 @@ type PostServer struct {
 }
 
 func (server *PostServer) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.CreatePostResponse, error) {
-	var post_id uint64
+	var post_id uint32
 	if err := server.DataBase.QueryRowContext(
 		ctx,
 		"INSERT INTO posts (title, author, content) VALUES ($1, $2, $3) RETURNING post_id",
@@ -33,10 +34,10 @@ func (server *PostServer) CreatePost(ctx context.Context, request *pb.CreatePost
 	).Scan(&post_id); err != nil {
 		return nil, fmt.Errorf("failed to create post: %s", err)
 	}
-	return &pb.CreatePostResponse{PostId: &post_id}, nil
+	return &pb.CreatePostResponse{PostId: post_id}, nil
 }
 
-func (server *PostServer) UpdatePost(ctx context.Context, request *pb.UpdatePostRequest) (*pb.SuccessResponse, error) {
+func (server *PostServer) UpdatePost(ctx context.Context, request *pb.UpdatePostRequest) (*emptypb.Empty, error) {
 	exec, err := server.DataBase.ExecContext(
 		ctx,
 		"UPDATE posts SET title = $1, content = $2 WHERE post_id = $3 AND author = $4",
@@ -55,10 +56,10 @@ func (server *PostServer) UpdatePost(ctx context.Context, request *pb.UpdatePost
 	if rows == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "no post with id: %d", request.PostId)
 	}
-	return &pb.SuccessResponse{Successful: true}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (server *PostServer) DeletePost(ctx context.Context, request *pb.DeletePostRequest) (*pb.SuccessResponse, error) {
+func (server *PostServer) DeletePost(ctx context.Context, request *pb.DeletePostRequest) (*emptypb.Empty, error) {
 	exec, err := server.DataBase.ExecContext(
 		ctx,
 		"DELETE FROM posts WHERE post_id = $1 AND author = $2",
@@ -73,9 +74,9 @@ func (server *PostServer) DeletePost(ctx context.Context, request *pb.DeletePost
 		return nil, status.Errorf(codes.Internal, "failed to delete post: %v", err)
 	}
 	if rows == 0 {
-		return &pb.SuccessResponse{Successful: false}, nil
+		return &emptypb.Empty{}, nil
 	}
-	return &pb.SuccessResponse{Successful: true}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func (server *PostServer) GetPostById(ctx context.Context, request *pb.GetPostByIdRequest) (*pb.GetPostByIdResponse, error) {

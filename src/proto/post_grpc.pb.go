@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -31,8 +32,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PostManagerClient interface {
 	CreatePost(ctx context.Context, in *CreatePostRequest, opts ...grpc.CallOption) (*CreatePostResponse, error)
-	UpdatePost(ctx context.Context, in *UpdatePostRequest, opts ...grpc.CallOption) (*SuccessResponse, error)
-	DeletePost(ctx context.Context, in *DeletePostRequest, opts ...grpc.CallOption) (*SuccessResponse, error)
+	UpdatePost(ctx context.Context, in *UpdatePostRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeletePost(ctx context.Context, in *DeletePostRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetPostById(ctx context.Context, in *GetPostByIdRequest, opts ...grpc.CallOption) (*GetPostByIdResponse, error)
 	GetPostsOnPage(ctx context.Context, in *GetPostsOnPageRequest, opts ...grpc.CallOption) (*GetPostsOnPageResponse, error)
 }
@@ -55,9 +56,9 @@ func (c *postManagerClient) CreatePost(ctx context.Context, in *CreatePostReques
 	return out, nil
 }
 
-func (c *postManagerClient) UpdatePost(ctx context.Context, in *UpdatePostRequest, opts ...grpc.CallOption) (*SuccessResponse, error) {
+func (c *postManagerClient) UpdatePost(ctx context.Context, in *UpdatePostRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SuccessResponse)
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, PostManager_UpdatePost_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -65,9 +66,9 @@ func (c *postManagerClient) UpdatePost(ctx context.Context, in *UpdatePostReques
 	return out, nil
 }
 
-func (c *postManagerClient) DeletePost(ctx context.Context, in *DeletePostRequest, opts ...grpc.CallOption) (*SuccessResponse, error) {
+func (c *postManagerClient) DeletePost(ctx context.Context, in *DeletePostRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SuccessResponse)
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, PostManager_DeletePost_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -100,8 +101,8 @@ func (c *postManagerClient) GetPostsOnPage(ctx context.Context, in *GetPostsOnPa
 // for forward compatibility
 type PostManagerServer interface {
 	CreatePost(context.Context, *CreatePostRequest) (*CreatePostResponse, error)
-	UpdatePost(context.Context, *UpdatePostRequest) (*SuccessResponse, error)
-	DeletePost(context.Context, *DeletePostRequest) (*SuccessResponse, error)
+	UpdatePost(context.Context, *UpdatePostRequest) (*emptypb.Empty, error)
+	DeletePost(context.Context, *DeletePostRequest) (*emptypb.Empty, error)
 	GetPostById(context.Context, *GetPostByIdRequest) (*GetPostByIdResponse, error)
 	GetPostsOnPage(context.Context, *GetPostsOnPageRequest) (*GetPostsOnPageResponse, error)
 	mustEmbedUnimplementedPostManagerServer()
@@ -114,10 +115,10 @@ type UnimplementedPostManagerServer struct {
 func (UnimplementedPostManagerServer) CreatePost(context.Context, *CreatePostRequest) (*CreatePostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreatePost not implemented")
 }
-func (UnimplementedPostManagerServer) UpdatePost(context.Context, *UpdatePostRequest) (*SuccessResponse, error) {
+func (UnimplementedPostManagerServer) UpdatePost(context.Context, *UpdatePostRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdatePost not implemented")
 }
-func (UnimplementedPostManagerServer) DeletePost(context.Context, *DeletePostRequest) (*SuccessResponse, error) {
+func (UnimplementedPostManagerServer) DeletePost(context.Context, *DeletePostRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePost not implemented")
 }
 func (UnimplementedPostManagerServer) GetPostById(context.Context, *GetPostByIdRequest) (*GetPostByIdResponse, error) {
