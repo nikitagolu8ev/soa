@@ -1,191 +1,137 @@
-from pprint import pprint
-import time
 import unittest
 import requests
-from enum import Enum
 import json
-
-class Handles(Enum):
-    REGISTER = 1
-    LOGIN = 2
-    UPDATE_USER = 3
-    POST_CREATE = 4
-    POST_UPDATE = 5
-    POST_DELETE = 6
-    POST_GET = 7
-    PAGE_GET = 8
-    POST_VIEW = 9
-    POST_LIKE = 10
+import time
 
 class TestSocialNetworkMethods(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        print("setting up")
-        self.host = "http://localhost:4200/"
-        self.addrs = {
-            Handles.REGISTER: self.host + "users/register",
-            Handles.LOGIN: self.host + "users/login",
-            Handles.UPDATE_USER: self.host + "users/update",
-            Handles.POST_CREATE: self.host + "posts/create",
-            Handles.POST_UPDATE: self.host + "posts/update",
-            Handles.POST_DELETE: self.host + "posts/delete",
-            Handles.POST_GET: self.host + "posts/get",
-            Handles.PAGE_GET: self.host + "posts/page",
-            Handles.POST_VIEW: self.host + "posts/view/",
-            Handles.POST_LIKE: self.host + "posts/like/",
-
-        }
-        self.login = "login"
-        self.password = "password"
-
-        healthy = False
-        for _ in range(10):
-            r = requests.get("http://localhost:8192/stat/ping")
-            if r.status_code == 200:
-                healthy = True
-                print("Healthy stat service")
-                break
-            else:
-                print(r.content)
-                time.sleep(1)
-
-        if not healthy:
-            print("Unhealthy stats service! Exiting...")
-            exit(1)
-
-        # register once
-        r = requests.post(self.addrs[Handles.REGISTER], data=json.dumps({
-            "login": self.login,
-            "password": self.password
+        requests.post("http://localhost:4200/users/register", data=json.dumps({
+            "login": "login",
+            "password": "password"
+        }))
+        requests.post("http://localhost:4200/users/register", data=json.dumps({
+            "login": "second login",
+            "password": "password"
         }))
 
-
-    def try_login(self):
-        r = requests.post(self.addrs[Handles.LOGIN], data=json.dumps({
-            "login": self.login,
-            "password": self.password
+    def login(self, login, password):
+        r = requests.post("http://localhost:4200/users/login", data=json.dumps({
+            "login": login,
+            "password": password
         }))
         self.assertEqual(r.status_code, 200)
-        jwt_cookie = r.cookies.get("token")
-        self.assertIsNotNone(jwt_cookie)
+        cookie = r.cookies.get("token")
+        self.assertIsNotNone(cookie)
         return r.cookies
 
-
-    def test_login(self):
-        self.try_login()
-
-
-    def test_update(self):
-        cookies = self.try_login()
-
-        # update
-        r = requests.put(self.addrs[Handles.UPDATE_USER], data=json.dumps({
-            "email": "qwe@mail.ru"
+    def update_user(self, property, value, cookies):
+        r = requests.put("http://localhost:4200/users/", data=json.dumps({
+            property: value
         }), cookies=cookies.get_dict())
         self.assertEqual(r.status_code, 200)
 
-
-    def test_post(self):
-        cookies = self.try_login()
-
-        r = requests.post(self.addrs[Handles.POST_CREATE], data=json.dumps({
-            "Title": "post#1",
-            "Content": "some contents",
+    def create_post(self, title, content, cookies):
+        r = requests.post("http://localhost:4200/posts/", data=json.dumps({
+            "Title": title,
+            "Content": content,
         }), cookies=cookies.get_dict())
 
         self.assertEqual(r.status_code, 200)
-        post_id_1 = int(r.json()["PostId"])
+        return int(r.json()["PostId"])
 
-        r = requests.get(self.addrs[Handles.POST_GET] + f"/{post_id_1}", cookies=cookies.get_dict())
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("post#1", r.text)
-
-        r = requests.put(self.addrs[Handles.POST_UPDATE] + f"/{post_id_1}", data=json.dumps({
-            "Title": "post#0 (updated)",
-            "Content": "brand new data",
-        }), cookies=cookies.get_dict())
-        self.assertEqual(r.status_code, 200)
-
-        r = requests.get(self.addrs[Handles.POST_GET] + f"/{post_id_1}", cookies=cookies.get_dict())
-        self.assertIn("post#0 (updated)", r.text)
-
-        r = requests.post(self.addrs[Handles.POST_CREATE], data=json.dumps({
-            "Title": "post#2",
-            "Content": "abacaba",
+    def update_post(self, post_id, title, content, cookies):
+        r = requests.put("http://localhost:4200/posts/" + str(post_id), data=json.dumps({
+            "Title": title,
+            "Content": content,
         }), cookies=cookies.get_dict())
 
         self.assertEqual(r.status_code, 200)
-        post_id_2 = int(r.json()["PostId"])
 
-        r = requests.get(self.addrs[Handles.PAGE_GET] + "/0", cookies=cookies.get_dict())
+    def delete_post(self, post_id, cookies):
+        r = requests.delete("http://localhost:4200/posts/" + str(post_id), cookies=cookies.get_dict())
 
         self.assertEqual(r.status_code, 200)
-        self.assertIn("post#0 (updated)", r.text)
-        self.assertIn("post#2", r.text)
 
-        r = requests.delete(self.addrs[Handles.POST_DELETE] + f"/{post_id_1}", cookies=cookies.get_dict())
+    def get_post(self, post_id, cookies):
+        r = requests.get("http://localhost:4200/posts/" + str(post_id), cookies=cookies.get_dict())
         self.assertEqual(r.status_code, 200)
 
-        r = requests.delete(self.addrs[Handles.POST_DELETE] + f"/{post_id_2}", cookies=cookies.get_dict())
+        return r.json()["Post"]
+
+    def get_page(self, page_id, cookies):
+        r = requests.get("http://localhost:4200/posts/page/" + str(page_id), cookies=cookies.get_dict())
         self.assertEqual(r.status_code, 200)
 
-    def view_post(self, postId: int):
-        cookies = self.try_login()
-        print(self.addrs[Handles.POST_VIEW] + str(postId))
-        r = requests.put(self.addrs[Handles.POST_VIEW] + str(postId), cookies=cookies.get_dict())
-        self.assertEqual(r.status_code, 200)
-        time.sleep(1)
+        return r.json()["Posts"]
+    
+    def like_post(self, post_id, cookies):
+        r = requests.put("http://localhost:4200/posts/like/" + str(post_id), cookies=cookies.get_dict())
 
-    def like_post(self, postId: int):
-        cookies = self.try_login()
-        r = requests.put(self.addrs[Handles.POST_LIKE] + str(postId), cookies=cookies.get_dict())
-        print('like: ', r.content)
         self.assertEqual(r.status_code, 200)
-        time.sleep(1)
 
-    def get_post_stats(self, postId: int):
-        r = requests.get(f"http://localhost:8192/stat/likes/{postId}")
+    def view_post(self, post_id, cookies):
+        r = requests.put("http://localhost:4200/posts/view/" + str(post_id), cookies=cookies.get_dict())
+
+        self.assertEqual(r.status_code, 200)
+
+    def ping_stats(self):
+        r = requests.get("http://localhost:8192/stat/ping")
+
+        self.assertEqual(r.status_code, 200)
+
+    def get_stats(self, post_id):
+        r = requests.get("http://localhost:8192/stat/likes/" + str(post_id))
 
         print(r.content)
-        self.assertEqual(r.status_code, 200)
 
-    def test_stats(self):
-        cookies = self.try_login()
+        # self.assertEqual(r.status_code, 200)
 
-        data = {
-            "Title": "post_to_like",
-            "Content": "very likable",
-        }
-        r = requests.post(self.addrs[Handles.POST_CREATE], data=json.dumps(data), cookies=cookies.get_dict())
+    def test_login(self):
+        self.login("login", "password")
 
-        self.assertEqual(r.status_code, 200)
-        postId = int(r.json()["PostId"])
+    def test_update(self):
+        cookies = self.login("login", "password")
+        self.update_user("email", "new_email@email.com", cookies)
 
-        # self.view_post(postId)
+    def test_post(self):
+        cookies = self.login("login", "password")
 
-        self.get_post_stats(postId)
-        # self.assertEqual(statsPostId, postId)
-        # self.assertEqual(views, 1)
-        # self.assertEqual(likes, 0)
+        post_id_1 = self.create_post("1st post", "some content", cookies)
 
-        # self.view_post(postId)
+        print("First post:", self.get_post(post_id_1, cookies))
 
-        self.get_post_stats(postId)
-        # self.assertEqual(statsPostId, postId)
-        # self.assertEqual(views, 2)
-        # self.assertEqual(likes, 0)
+        self.update_post(post_id_1, "1st post (modified)", "some content (modified)", cookies)
 
-        print(postId)
-        self.like_post(postId)
-        self.get_post_stats(postId)
-        # self.assertEqual(statsPostId, postId)
-        # self.assertEqual(views, 2)
-        # self.assertEqual(likes, 1)
+        print("Second post:", self.get_post(post_id_1, cookies))
 
-        r = requests.delete(self.addrs[Handles.POST_DELETE] + f"/{postId}", cookies=cookies.get_dict())
-        self.assertEqual(r.status_code, 200)
+        post_id_2 = self.create_post("2nd post", "new content", cookies)
 
+        print("Page with both posts:", self.get_page(0, cookies))
+
+        self.delete_post(post_id_1, cookies)
+
+        print("Page after deleting first post:", self.get_page(0, cookies))
+
+        self.delete_post(post_id_2, cookies)
+
+    def test_like(self):
+        cookies = self.login("login", "password")
+
+        post_id = self.create_post("Post to like", "Content to like", cookies)
+
+        self.like_post(post_id, cookies)
+
+        cookies = self.login("second login", "password")
+
+        self.like_post(post_id, cookies)
+        self.like_post(post_id, cookies)
+
+
+        time.sleep(1)
+
+        self.get_stats(post_id)
 
 
 

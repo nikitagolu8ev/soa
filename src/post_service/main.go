@@ -6,12 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"os"
 
+	eh "error_handling"
 	pb "proto"
 
 	_ "github.com/lib/pq"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type PostServer struct {
@@ -44,14 +46,14 @@ func (server *PostServer) UpdatePost(ctx context.Context, request *pb.UpdatePost
 		request.Author,
 	)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "failed to update post: %v", err)
 	}
 	rows, err := exec.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("failed to update post: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to update post: %v", err)
 	}
 	if rows == 0 {
-		return &pb.SuccessResponse{Successful: false}, nil
+		return nil, status.Errorf(codes.InvalidArgument, "no post with id: %d", request.PostId)
 	}
 	return &pb.SuccessResponse{Successful: true}, nil
 }
@@ -64,11 +66,11 @@ func (server *PostServer) DeletePost(ctx context.Context, request *pb.DeletePost
 		request.Author,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to delete post: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to delete post: %v", err)
 	}
 	rows, err := exec.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("failed to delete post: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to delete post: %v", err)
 	}
 	if rows == 0 {
 		return &pb.SuccessResponse{Successful: false}, nil
@@ -83,7 +85,7 @@ func (server *PostServer) GetPostById(ctx context.Context, request *pb.GetPostBy
 		"SELECT post_id, title, author, content FROM posts WHERE post_id = $1",
 		request.PostId,
 	).Scan(&post.PostId, &post.Title, &post.Author, &post.Content); err != nil {
-		return nil, fmt.Errorf("failed to get post: %s", err)
+		return nil, status.Errorf(codes.InvalidArgument, "failed to get post: %s", err)
 	}
 	return &pb.GetPostByIdResponse{Post: &post}, nil
 }
@@ -97,19 +99,19 @@ func (server *PostServer) GetPostsOnPage(ctx context.Context, request *pb.GetPos
 		server.PostsPerPage*uint(request.PageId),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get posts page: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to get posts page: %s", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var post pb.Post
 		if err = rows.Scan(&post.PostId, &post.Title, &post.Author, &post.Content); err != nil {
-			return nil, fmt.Errorf("failed to iterate posts page: %s", err)
+			return nil, status.Errorf(codes.Internal, "failed to iterate posts page: %s", err)
 		}
 		posts = append(posts, &post)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate posts page: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to iterate posts page: %s", err)
 	}
 	return &pb.GetPostsOnPageResponse{Posts: posts}, nil
 }
@@ -120,17 +122,13 @@ func main() {
 	flag.Parse()
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to listen: %v", err)
-		os.Exit(1)
-	}
+	eh.CheckCritical(err, "Failed to listen")
 
-	db, err := sql.Open("postgres", "host=postgres port=5432 user=post_service password=password dbname=posts_db sslmode=disable")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't open post service database: %s", err)
-		os.Exit(1)
-	}
+	db, err := sql.Open("postgres", "host=posts_postgres port=5432 user=post_service password=password dbname=posts_db sslmode=disable")
+	eh.CheckCritical(err, "Can't open post service database")
 	defer db.Close()
+
+	eh.CheckCritical(db.Ping(), "Can't reach post service database")
 
 	_, err = db.Exec(`
 	CREATE TABLE IF NOT EXISTS posts (
@@ -140,18 +138,11 @@ func main() {
 		content TEXT
 	)
 	`)
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't create posts table: %s", err)
-		os.Exit(1)
-	}
+	eh.CheckCritical(err, "Can't create posts table")
 
 	post_server := grpc.NewServer()
 	pb.RegisterPostManagerServer(post_server, &PostServer{DataBase: db, PostsPerPage: *posts_per_page})
 
 	fmt.Printf("Starting post serving on port: %d\n", *port)
-	if err = post_server.Serve(lis); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	eh.CheckCritical(post_server.Serve(lis), "post_service")
 }

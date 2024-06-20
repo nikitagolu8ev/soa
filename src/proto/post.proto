@@ -24,7 +24,7 @@ message CreatePostRequest {
 }
 
 message CreatePostResponse {
-  optional uint64 PostId = 1;
+  uint64 PostId = 1;
 }
 
 message UpdatePostRequest {
@@ -41,7 +41,7 @@ message DeletePostRequest {
 
 message GetPostByIdRequest { uint64 PostId = 1; }
 
-message GetPostByIdResponse { optional Post Post = 1; }
+message GetPostByIdResponse { Post Post = 1; }
 
 message GetPostsOnPageRequest { uint64 PageId = 1; }
 
