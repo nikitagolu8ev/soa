@@ -74,7 +74,7 @@ func (server *PostServer) DeletePost(ctx context.Context, request *pb.DeletePost
 		return nil, status.Errorf(codes.Internal, "failed to delete post: %v", err)
 	}
 	if rows == 0 {
-		return &emptypb.Empty{}, nil
+		return nil, status.Errorf(codes.InvalidArgument, "no post with id: %d and author id: %d", request.PostId, request.AuthorId)
 	}
 	return &emptypb.Empty{}, nil
 }

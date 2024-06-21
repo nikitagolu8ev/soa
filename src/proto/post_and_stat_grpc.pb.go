@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.4.0
 // - protoc             v5.26.1
-// source: post.proto
+// source: post_and_stat.proto
 
-package post
+package post_and_stat
 
 import (
 	context "context"
@@ -259,5 +259,210 @@ var PostManager_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "post.proto",
+	Metadata: "post_and_stat.proto",
+}
+
+const (
+	StatManager_GetPostStats_FullMethodName  = "/StatManager/GetPostStats"
+	StatManager_GetTopPosts_FullMethodName   = "/StatManager/GetTopPosts"
+	StatManager_GetTopAuthors_FullMethodName = "/StatManager/GetTopAuthors"
+	StatManager_DeletePost_FullMethodName    = "/StatManager/DeletePost"
+)
+
+// StatManagerClient is the client API for StatManager service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type StatManagerClient interface {
+	GetPostStats(ctx context.Context, in *GetPostStatsRequest, opts ...grpc.CallOption) (*GetPostStatsResponse, error)
+	GetTopPosts(ctx context.Context, in *GetTopPostsRequest, opts ...grpc.CallOption) (*GetTopPostsResponse, error)
+	GetTopAuthors(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetTopAuthorsResponse, error)
+	DeletePost(ctx context.Context, in *DeletePostRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+}
+
+type statManagerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewStatManagerClient(cc grpc.ClientConnInterface) StatManagerClient {
+	return &statManagerClient{cc}
+}
+
+func (c *statManagerClient) GetPostStats(ctx context.Context, in *GetPostStatsRequest, opts ...grpc.CallOption) (*GetPostStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPostStatsResponse)
+	err := c.cc.Invoke(ctx, StatManager_GetPostStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *statManagerClient) GetTopPosts(ctx context.Context, in *GetTopPostsRequest, opts ...grpc.CallOption) (*GetTopPostsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTopPostsResponse)
+	err := c.cc.Invoke(ctx, StatManager_GetTopPosts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *statManagerClient) GetTopAuthors(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetTopAuthorsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTopAuthorsResponse)
+	err := c.cc.Invoke(ctx, StatManager_GetTopAuthors_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *statManagerClient) DeletePost(ctx context.Context, in *DeletePostRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, StatManager_DeletePost_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// StatManagerServer is the server API for StatManager service.
+// All implementations must embed UnimplementedStatManagerServer
+// for forward compatibility
+type StatManagerServer interface {
+	GetPostStats(context.Context, *GetPostStatsRequest) (*GetPostStatsResponse, error)
+	GetTopPosts(context.Context, *GetTopPostsRequest) (*GetTopPostsResponse, error)
+	GetTopAuthors(context.Context, *emptypb.Empty) (*GetTopAuthorsResponse, error)
+	DeletePost(context.Context, *DeletePostRequest) (*emptypb.Empty, error)
+	mustEmbedUnimplementedStatManagerServer()
+}
+
+// UnimplementedStatManagerServer must be embedded to have forward compatible implementations.
+type UnimplementedStatManagerServer struct {
+}
+
+func (UnimplementedStatManagerServer) GetPostStats(context.Context, *GetPostStatsRequest) (*GetPostStatsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPostStats not implemented")
+}
+func (UnimplementedStatManagerServer) GetTopPosts(context.Context, *GetTopPostsRequest) (*GetTopPostsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTopPosts not implemented")
+}
+func (UnimplementedStatManagerServer) GetTopAuthors(context.Context, *emptypb.Empty) (*GetTopAuthorsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTopAuthors not implemented")
+}
+func (UnimplementedStatManagerServer) DeletePost(context.Context, *DeletePostRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeletePost not implemented")
+}
+func (UnimplementedStatManagerServer) mustEmbedUnimplementedStatManagerServer() {}
+
+// UnsafeStatManagerServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to StatManagerServer will
+// result in compilation errors.
+type UnsafeStatManagerServer interface {
+	mustEmbedUnimplementedStatManagerServer()
+}
+
+func RegisterStatManagerServer(s grpc.ServiceRegistrar, srv StatManagerServer) {
+	s.RegisterService(&StatManager_ServiceDesc, srv)
+}
+
+func _StatManager_GetPostStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPostStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatManagerServer).GetPostStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatManager_GetPostStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatManagerServer).GetPostStats(ctx, req.(*GetPostStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StatManager_GetTopPosts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTopPostsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatManagerServer).GetTopPosts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatManager_GetTopPosts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatManagerServer).GetTopPosts(ctx, req.(*GetTopPostsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StatManager_GetTopAuthors_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatManagerServer).GetTopAuthors(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatManager_GetTopAuthors_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatManagerServer).GetTopAuthors(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StatManager_DeletePost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePostRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatManagerServer).DeletePost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatManager_DeletePost_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatManagerServer).DeletePost(ctx, req.(*DeletePostRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// StatManager_ServiceDesc is the grpc.ServiceDesc for StatManager service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var StatManager_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "StatManager",
+	HandlerType: (*StatManagerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetPostStats",
+			Handler:    _StatManager_GetPostStats_Handler,
+		},
+		{
+			MethodName: "GetTopPosts",
+			Handler:    _StatManager_GetTopPosts_Handler,
+		},
+		{
+			MethodName: "GetTopAuthors",
+			Handler:    _StatManager_GetTopAuthors_Handler,
+		},
+		{
+			MethodName: "DeletePost",
+			Handler:    _StatManager_DeletePost_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "post_and_stat.proto",
 }

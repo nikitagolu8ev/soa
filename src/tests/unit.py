@@ -15,6 +15,14 @@ class TestSocialNetworkMethods(unittest.TestCase):
             "login": "second login",
             "password": "password"
         }))
+        requests.post("http://localhost:4200/users/register", data=json.dumps({
+            "login": "third login",
+            "password": "password"
+        }))
+        requests.post("http://localhost:4200/users/register", data=json.dumps({
+            "login": "forth login",
+            "password": "password"
+        }))
 
     def login(self, login, password):
         r = requests.post("http://localhost:4200/users/login", data=json.dumps({
@@ -76,17 +84,26 @@ class TestSocialNetworkMethods(unittest.TestCase):
 
         self.assertEqual(r.status_code, 200)
 
-    def ping_stats(self):
-        r = requests.get("http://localhost:8192/stat/ping")
-
-        self.assertEqual(r.status_code, 200)
-
     def get_stats(self, post_id):
-        r = requests.get("http://localhost:8192/stat/likes/" + str(post_id))
+        r = requests.get("http://localhost:4200/posts/stats/" + str(post_id))
 
         print(r.content)
 
-        # self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 200)
+
+    def get_top_posts(self, order_by):
+        r = requests.get("http://localhost:4200/posts/top/" + order_by)
+
+        print(r.content)
+
+        self.assertEqual(r.status_code, 200)
+
+    def get_top_authors(self):
+        r = requests.get("http://localhost:4200/users/top")
+
+        print(r.content)
+
+        self.assertEqual(r.status_code, 200)
 
     def test_login(self):
         self.login("login", "password")
@@ -100,21 +117,26 @@ class TestSocialNetworkMethods(unittest.TestCase):
 
         post_id_1 = self.create_post("1st post", "some content", cookies)
 
-        print("First post:", self.get_post(post_id_1, cookies))
+        # print("First post:", self.get_post(post_id_1, cookies))
 
         self.update_post(post_id_1, "1st post (modified)", "some content (modified)", cookies)
 
-        print("Second post:", self.get_post(post_id_1, cookies))
+        # print("Second post:", self.get_post(post_id_1, cookies))
 
         post_id_2 = self.create_post("2nd post", "new content", cookies)
 
-        print("Page with both posts:", self.get_page(0, cookies))
+        # print("Page with both posts:", self.get_page(0, cookies))
 
         self.delete_post(post_id_1, cookies)
 
-        print("Page after deleting first post:", self.get_page(0, cookies))
+        # print("Page after deleting first post:", self.get_page(0, cookies))
 
         self.delete_post(post_id_2, cookies)
+
+        r = requests.delete("http://localhost:4200/posts/" + str(post_id_1), cookies=cookies.get_dict())
+
+        print(r.status_code, r.content)
+
 
     def test_like(self):
         cookies = self.login("login", "password")
@@ -122,6 +144,7 @@ class TestSocialNetworkMethods(unittest.TestCase):
         post_id = self.create_post("Post to like", "Content to like", cookies)
 
         self.like_post(post_id, cookies)
+        self.view_post(post_id, cookies)
 
         cookies = self.login("second login", "password")
 
@@ -133,6 +156,59 @@ class TestSocialNetworkMethods(unittest.TestCase):
 
         self.get_stats(post_id)
 
+        cookies = self.login("login", "password")
+        self.delete_post(post_id, cookies)
+        self.get_stats(post_id)
+
+    def test_top_posts(self):
+        cookies = self.login("login", "password")
+
+        first_post_id = self.create_post("Most liked post", "...", cookies)
+        self.like_post(first_post_id, cookies)
+
+
+        cookies = self.login("second login", "password")
+
+        second_post_id = self.create_post("Second liked post", "...", cookies)
+        self.like_post(first_post_id, cookies)
+        self.like_post(second_post_id, cookies)
+
+        cookies = self.login("third login", "password")
+
+        third_post_id = self.create_post("Third liked post", "...", cookies)
+        self.like_post(first_post_id, cookies)
+        self.like_post(second_post_id, cookies)
+        self.like_post(third_post_id, cookies)
+
+        cookies = self.login("forth login", "password")
+
+        forth_post_id = self.create_post("Forth liked post", "...", cookies)
+        fivth_post_id = self.create_post("Fivth liked post", "...", cookies)
+        sixth_post_id = self.create_post("Sixth liked post", "...", cookies)
+        self.like_post(first_post_id, cookies)
+        self.like_post(second_post_id, cookies)
+        self.like_post(third_post_id, cookies)
+        self.like_post(forth_post_id, cookies)
+        self.like_post(sixth_post_id, cookies)
+
+        time.sleep(1)
+
+        self.get_top_posts("likes")
+        self.delete_post(forth_post_id, cookies)
+        self.delete_post(fivth_post_id, cookies)
+        self.delete_post(sixth_post_id, cookies)
+        
+        cookies = self.login("third login", "password")
+        self.delete_post(third_post_id, cookies)
+
+        cookies = self.login("second login", "password")
+        self.delete_post(second_post_id, cookies)
+    
+        cookies = self.login("login", "password")
+        self.delete_post(first_post_id, cookies)
+
+    def test_top_authors(self):
+        self.get_top_authors()
 
 
 

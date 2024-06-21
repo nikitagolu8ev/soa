@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type UserAuth struct {
@@ -45,13 +46,15 @@ type MainServer struct {
 	DataBase         *sql.DB
 	KafkaProducer    sarama.SyncProducer
 	PostServerClient pb.PostManagerClient
+	StatServerClient pb.StatManagerClient
 	PrivateKey       *rsa.PrivateKey
 	PublicKey        *rsa.PublicKey
 }
 
 type Event struct {
-	PostId int32 `json:"post_id"`
-	UserId int32 `json:"user_id"`
+	PostId   int32 `json:"post_id"`
+	AuthorId int32 `json:"author_id"`
+	UserId   int32 `json:"user_id"`
 }
 
 func (server MainServer) GetUserId(ctx context.Context, login string) *int32 {
@@ -60,6 +63,15 @@ func (server MainServer) GetUserId(ctx context.Context, login string) *int32 {
 		return nil
 	}
 	return &user_id
+}
+
+func (server MainServer) GetUserLogin(ctx context.Context, user_id int32) (string, error) {
+	var login string
+	if err := server.DataBase.QueryRowContext(ctx, `SELECT login FROM user_data WHERE user_id = $1`, user_id).Scan(&login); err != nil {
+		return "", err
+	}
+	return login, nil
+
 }
 
 func (server MainServer) Register(writer http.ResponseWriter, request *http.Request) {
@@ -249,8 +261,16 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 	grpc_request.PostId = int32(post_id)
 
 	_, err = server.PostServerClient.DeletePost(request.Context(), &grpc_request)
-	status, _ := status.FromError(err)
-	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
+	s, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(s, "post service grpc error", writer) {
+		return
+	}
+
+	fmt.Println(grpc_request)
+
+	_, err = server.StatServerClient.DeletePost(request.Context(), &grpc_request)
+	s, _ = status.FromError(err)
+	if eh.CheckGrpcHttp(s, "stat service grpc error", writer) {
 		return
 	}
 	writer.WriteHeader(http.StatusOK)
@@ -321,9 +341,21 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	grpc_request := pb.GetPostByIdRequest{}
+	grpc_request.PostId = int32(post_id)
+
+	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
+		return
+	}
+
+	author_id := grpc_response.Post.AuthorId
+
 	var like Event
 	like.PostId = int32(post_id)
 	like.UserId = user_id
+	like.AuthorId = author_id
 
 	message_payload, err := json.Marshal(like)
 	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
@@ -355,8 +387,20 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	grpc_request := pb.GetPostByIdRequest{}
+	grpc_request.PostId = int32(post_id)
+
+	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
+		return
+	}
+
+	author_id := grpc_response.Post.AuthorId
+
 	var view Event
 	view.PostId = int32(post_id)
+	view.AuthorId = author_id
 	view.UserId = user_id
 
 	message_payload, err := json.Marshal(view)
@@ -376,11 +420,101 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 	writer.WriteHeader(http.StatusOK)
 }
 
+func (server MainServer) GetPostStats(writer http.ResponseWriter, request *http.Request) {
+	vars := mux.Vars(request)
+	post_id_str := vars["post_id"]
+	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
+	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
+		return
+	}
+
+	grpc_request := pb.GetPostStatsRequest{}
+	grpc_request.PostId = int32(post_id)
+
+	grpc_response, err := server.StatServerClient.GetPostStats(request.Context(), &grpc_request)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "stat service grpc error", writer) {
+		return
+	}
+
+	response, err := json.Marshal(grpc_response)
+	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
+		return
+	}
+	writer.Write(response)
+}
+
+func (server MainServer) GetTopPosts(writer http.ResponseWriter, request *http.Request) {
+	vars := mux.Vars(request)
+	order_by := vars["order_by"]
+
+	grpc_request := pb.GetTopPostsRequest{}
+	if order_by == "likes" {
+		grpc_request.OrderBy = pb.OrderPostsBy_LIKES
+	} else if order_by == "views" {
+		grpc_request.OrderBy = pb.OrderPostsBy_VIEWS
+	} else {
+		http.Error(writer, "Invalid order_by argument", http.StatusBadRequest)
+		return
+	}
+
+	grpc_response, err := server.StatServerClient.GetTopPosts(request.Context(), &grpc_request)
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "stat service grpc error", writer) {
+		return
+	}
+
+	var result pb.TopPosts
+	for _, stats := range grpc_response.PostStats {
+		var final_stats pb.FinalPostStats
+		final_stats.PostId = stats.PostId
+		final_stats.Stat = stats.Stat
+		final_stats.Author, err = server.GetUserLogin(request.Context(), stats.AuthorId)
+		if eh.CheckHttp(err, "Can't find login by user id", http.StatusInternalServerError, writer) {
+			return
+		}
+		result.PostStats = append(result.PostStats, &final_stats)
+	}
+
+	response, err := json.Marshal(&result)
+	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
+		return
+	}
+	writer.Write(response)
+}
+
+func (server MainServer) GetTopAuthors(writer http.ResponseWriter, request *http.Request) {
+	grpc_response, err := server.StatServerClient.GetTopAuthors(request.Context(), &emptypb.Empty{})
+	status, _ := status.FromError(err)
+	if eh.CheckGrpcHttp(status, "stat service grpc error", writer) {
+		return
+	}
+
+	var result pb.TopAuthors
+	for _, stats := range grpc_response.AuthorStats {
+		var final_stats pb.FinalAuthorStats
+		final_stats.Likes = stats.Likes
+		final_stats.Author, err = server.GetUserLogin(request.Context(), stats.AuthorId)
+		if eh.CheckHttp(err, "Can't find login by user id", http.StatusInternalServerError, writer) {
+			return
+		}
+		result.AuthorStats = append(result.AuthorStats, &final_stats)
+	}
+
+	response, err := json.Marshal(&result)
+	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
+		return
+	}
+	writer.Write(response)
+
+}
+
 func main() {
 	private_key_path := flag.String("private_key_path", "", "path to private key file")
 	public_key_path := flag.String("public_key_path", "", "path to public key file")
 	server_port := flag.Int("port", 4200, "server port")
 	post_server_port := flag.Int("post_server_port", 50051, "post server port")
+	stat_server_port := flag.Int("stat_server_port", 8192, "stat server port")
 	flag.Parse()
 
 	eh.CheckConditionCritical(*private_key_path == "", "No path to private key file")
@@ -391,10 +525,15 @@ func main() {
 	server.KafkaProducer, err = sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
 	eh.CheckCritical(err, "Failed to connect to kafka")
 
-	conn, err := grpc.NewClient(fmt.Sprintf("post_service:%d", *post_server_port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	post_conn, err := grpc.NewClient(fmt.Sprintf("post_service:%d", *post_server_port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	eh.CheckCritical(err, "Failed to connect to post server")
-	defer conn.Close()
-	server.PostServerClient = pb.NewPostManagerClient(conn)
+	defer post_conn.Close()
+	server.PostServerClient = pb.NewPostManagerClient(post_conn)
+
+	stat_conn, err := grpc.NewClient(fmt.Sprintf("stat_service:%d", *stat_server_port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	eh.CheckCritical(err, "Failed to connect to stat server")
+	defer stat_conn.Close()
+	server.StatServerClient = pb.NewStatManagerClient(stat_conn)
 
 	private_key, err := os.ReadFile(*private_key_path)
 	eh.CheckCritical(err, "private key")
@@ -421,6 +560,9 @@ func main() {
 	router.HandleFunc("/posts/page/{page_id}", server.GetPostsOnPage).Methods("GET")
 	router.HandleFunc("/posts/view/{post_id}", server.ViewPost).Methods("PUT")
 	router.HandleFunc("/posts/like/{post_id}", server.LikePost).Methods("PUT")
+	router.HandleFunc("/posts/stats/{post_id}", server.GetPostStats).Methods("GET")
+	router.HandleFunc("/posts/top/{order_by}", server.GetTopPosts).Methods("GET")
+	router.HandleFunc("/users/top", server.GetTopAuthors).Methods("GET")
 
 	fmt.Printf("Starting serving on port: %d\n", *server_port)
 
