@@ -32,7 +32,7 @@ class TestSocialNetworkMethods(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         cookie = r.cookies.get("token")
         self.assertIsNotNone(cookie)
-        return r.cookies
+        return r.cookies, r.json()['UserId']
 
     def update_user(self, property, value, cookies):
         r = requests.put("http://localhost:4200/users/", data=json.dumps({
@@ -74,13 +74,17 @@ class TestSocialNetworkMethods(unittest.TestCase):
 
         return r.json()["Posts"]
     
-    def like_post(self, post_id, cookies):
-        r = requests.put("http://localhost:4200/posts/like/" + str(post_id), cookies=cookies.get_dict())
+    def like_post(self, post_id, user_id, cookies):
+        r = requests.put("http://localhost:4200/posts/like/" + str(post_id), data=json.dumps({
+            "author_id": user_id,
+        }), cookies=cookies.get_dict())
 
         self.assertEqual(r.status_code, 200)
 
-    def view_post(self, post_id, cookies):
-        r = requests.put("http://localhost:4200/posts/view/" + str(post_id), cookies=cookies.get_dict())
+    def view_post(self, post_id, user_id, cookies):
+        r = requests.put("http://localhost:4200/posts/view/" + str(post_id), data=json.dumps({
+            "author_id": user_id,
+        }), cookies=cookies.get_dict())
 
         self.assertEqual(r.status_code, 200)
 
@@ -109,11 +113,11 @@ class TestSocialNetworkMethods(unittest.TestCase):
         self.login("login", "password")
 
     def test_update(self):
-        cookies = self.login("login", "password")
+        cookies, _ = self.login("login", "password")
         self.update_user("email", "new_email@email.com", cookies)
 
     def test_post(self):
-        cookies = self.login("login", "password")
+        cookies, _ = self.login("login", "password")
 
         post_id_1 = self.create_post("1st post", "some content", cookies)
 
@@ -133,63 +137,63 @@ class TestSocialNetworkMethods(unittest.TestCase):
 
         self.delete_post(post_id_2, cookies)
 
-        r = requests.delete("http://localhost:4200/posts/" + str(post_id_1), cookies=cookies.get_dict())
+        # r = requests.delete("http://localhost:4200/posts/" + str(post_id_1), cookies=cookies.get_dict())
 
-        print(r.status_code, r.content)
+        # print(r.status_code, r.content)
 
 
     def test_like(self):
-        cookies = self.login("login", "password")
+        cookies, user_id = self.login("login", "password")
 
         post_id = self.create_post("Post to like", "Content to like", cookies)
 
-        self.like_post(post_id, cookies)
-        self.view_post(post_id, cookies)
+        self.like_post(post_id, user_id, cookies)
+        self.view_post(post_id, user_id, cookies)
 
-        cookies = self.login("second login", "password")
+        cookies, _ = self.login("second login", "password")
 
-        self.like_post(post_id, cookies)
-        self.like_post(post_id, cookies)
+        self.like_post(post_id, user_id, cookies)
+        self.like_post(post_id, user_id, cookies)
 
 
         time.sleep(1)
 
         self.get_stats(post_id)
 
-        cookies = self.login("login", "password")
+        cookies, _ = self.login("login", "password")
         self.delete_post(post_id, cookies)
         self.get_stats(post_id)
 
     def test_top_posts(self):
-        cookies = self.login("login", "password")
+        cookies, first_author = self.login("login", "password")
 
         first_post_id = self.create_post("Most liked post", "...", cookies)
-        self.like_post(first_post_id, cookies)
+        self.like_post(first_post_id, first_author, cookies)
 
 
-        cookies = self.login("second login", "password")
+        cookies, second_author = self.login("second login", "password")
 
         second_post_id = self.create_post("Second liked post", "...", cookies)
-        self.like_post(first_post_id, cookies)
-        self.like_post(second_post_id, cookies)
+        self.like_post(first_post_id, first_author, cookies)
+        self.like_post(second_post_id, second_author, cookies)
 
-        cookies = self.login("third login", "password")
+        cookies, third_author = self.login("third login", "password")
 
         third_post_id = self.create_post("Third liked post", "...", cookies)
-        self.like_post(first_post_id, cookies)
-        self.like_post(second_post_id, cookies)
-        self.like_post(third_post_id, cookies)
+        self.like_post(first_post_id, first_author, cookies)
+        self.like_post(second_post_id, second_author, cookies)
+        self.like_post(third_post_id, third_author, cookies)
 
-        cookies = self.login("forth login", "password")
+        cookies, forth_author = self.login("forth login", "password")
 
         forth_post_id = self.create_post("Forth liked post", "...", cookies)
         fivth_post_id = self.create_post("Fivth liked post", "...", cookies)
         sixth_post_id = self.create_post("Sixth liked post", "...", cookies)
-        self.like_post(first_post_id, cookies)
-        self.like_post(second_post_id, cookies)
-        self.like_post(third_post_id, cookies)
-        self.like_post(forth_post_id, cookies)
-        self.like_post(sixth_post_id, cookies)
+        self.like_post(first_post_id, first_author, cookies)
+        self.like_post(second_post_id, second_author, cookies)
+        self.like_post(third_post_id, third_author, cookies)
+        self.like_post(forth_post_id, forth_author, cookies)
+        self.like_post(sixth_post_id, forth_author, cookies)
 
         time.sleep(1)
 
@@ -198,17 +202,61 @@ class TestSocialNetworkMethods(unittest.TestCase):
         self.delete_post(fivth_post_id, cookies)
         self.delete_post(sixth_post_id, cookies)
         
-        cookies = self.login("third login", "password")
+        cookies, _ = self.login("third login", "password")
         self.delete_post(third_post_id, cookies)
 
-        cookies = self.login("second login", "password")
+        cookies, _ = self.login("second login", "password")
         self.delete_post(second_post_id, cookies)
     
-        cookies = self.login("login", "password")
+        cookies, _ = self.login("login", "password")
         self.delete_post(first_post_id, cookies)
 
     def test_top_authors(self):
+        cookies, first_author = self.login("login", "password")
+
+        first_post_id = self.create_post("Most liked post", "...", cookies)
+        self.like_post(first_post_id, first_author, cookies)
+
+
+        cookies, second_author = self.login("second login", "password")
+
+        second_post_id = self.create_post("Second liked post", "...", cookies)
+        self.like_post(first_post_id, first_author, cookies)
+        self.like_post(second_post_id, second_author, cookies)
+
+        cookies, third_author = self.login("third login", "password")
+
+        third_post_id = self.create_post("Third liked post", "...", cookies)
+        self.like_post(first_post_id, first_author, cookies)
+        self.like_post(second_post_id, second_author, cookies)
+        self.like_post(third_post_id, third_author, cookies)
+
+        cookies, forth_author = self.login("forth login", "password")
+
+        forth_post_id = self.create_post("Forth liked post", "...", cookies)
+        fivth_post_id = self.create_post("Fivth liked post", "...", cookies)
+        sixth_post_id = self.create_post("Sixth liked post", "...", cookies)
+        self.like_post(first_post_id, first_author, cookies)
+        self.like_post(second_post_id, second_author, cookies)
+        self.like_post(third_post_id, third_author, cookies)
+        self.like_post(forth_post_id, forth_author, cookies)
+        self.like_post(sixth_post_id, forth_author, cookies)
+
+        time.sleep(1)
+
         self.get_top_authors()
+        self.delete_post(forth_post_id, cookies)
+        self.delete_post(fivth_post_id, cookies)
+        self.delete_post(sixth_post_id, cookies)
+        
+        cookies, _ = self.login("third login", "password")
+        self.delete_post(third_post_id, cookies)
+
+        cookies, _ = self.login("second login", "password")
+        self.delete_post(second_post_id, cookies)
+    
+        cookies, _ = self.login("login", "password")
+        self.delete_post(first_post_id, cookies)
 
 
 

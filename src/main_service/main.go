@@ -51,6 +51,10 @@ type MainServer struct {
 	PublicKey        *rsa.PublicKey
 }
 
+type AuthorId struct {
+	AuthorId int64 `json:"author_id"`
+}
+
 type Event struct {
 	PostId   int64 `json:"post_id"`
 	AuthorId int64 `json:"author_id"`
@@ -71,7 +75,6 @@ func (server MainServer) GetUserLogin(ctx context.Context, user_id int64) (strin
 		return "", err
 	}
 	return login, nil
-
 }
 
 func (server MainServer) Register(writer http.ResponseWriter, request *http.Request) {
@@ -104,7 +107,8 @@ func (server MainServer) Register(writer http.ResponseWriter, request *http.Requ
 		Value:  token,
 		MaxAge: 24 * 60 * 60,
 	})
-	writer.WriteHeader(http.StatusOK)
+	response := []byte(fmt.Sprintf("{\"UserId\":%d}", user_id))
+	writer.Write(response)
 }
 
 func (server MainServer) Login(writer http.ResponseWriter, request *http.Request) {
@@ -136,7 +140,8 @@ func (server MainServer) Login(writer http.ResponseWriter, request *http.Request
 		Value:  token,
 		MaxAge: 24 * 60 * 60,
 	})
-	writer.WriteHeader(http.StatusOK)
+	response := []byte(fmt.Sprintf("{\"UserId\":%d}", user_id))
+	writer.Write(response)
 }
 
 func (server MainServer) AuthorisedUser(request *http.Request) (int64, error) {
@@ -327,6 +332,12 @@ func (server MainServer) GetPostsOnPage(writer http.ResponseWriter, request *htt
 }
 
 func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Request) {
+	var author AuthorId
+	if eh.CheckHttp(json.NewDecoder(request.Body).Decode(&author), "Invalid input", http.StatusBadRequest, writer) {
+		return
+	}
+	author_id := author.AuthorId
+
 	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
@@ -338,17 +349,6 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
-
-	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.PostId = post_id
-
-	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
-	status, _ := status.FromError(err)
-	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
-		return
-	}
-
-	author_id := grpc_response.Post.AuthorId
 
 	var like Event
 	like.PostId = int64(post_id)
@@ -373,6 +373,12 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 }
 
 func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Request) {
+	var author AuthorId
+	if eh.CheckHttp(json.NewDecoder(request.Body).Decode(&author), "Invalid input", http.StatusBadRequest, writer) {
+		return
+	}
+	author_id := author.AuthorId
+
 	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
@@ -384,17 +390,6 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
-
-	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.PostId = post_id
-
-	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
-	status, _ := status.FromError(err)
-	if eh.CheckGrpcHttp(status, "post service grpc error", writer) {
-		return
-	}
-
-	author_id := grpc_response.Post.AuthorId
 
 	var view Event
 	view.PostId = post_id
