@@ -6,12 +6,8 @@ services:
       POSTGRES_DB: userdata_db
       POSTGRES_USER: main_service
       POSTGRES_PASSWORD: 'password'
-    networks:
-      - local
-
-  redis:
-    container_name: redis_user_data_db
-    image: redis:latest
+    volumes:
+      - ./main_service/db/init:/docker-entrypoint-initdb.d
     networks:
       - local
 
@@ -21,6 +17,8 @@ services:
       POSTGRES_DB: posts_db
       POSTGRES_USER: post_service
       POSTGRES_PASSWORD: 'password'
+    volumes:
+      - ./post_service/db/init:/docker-entrypoint-initdb.d
     networks:
       - local
 
@@ -37,13 +35,15 @@ services:
       - local
 
   clickhouse:
-    image: 'bitnami/clickhouse:latest'
+    image: 'clickhouse/clickhouse-server:latest'
     restart: on-failure:10
     ports:
       - 8123:8123
       - 9000:9000
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
+    volumes:
+      - ./stat_service/db/init:/docker-entrypoint-initdb.d
     networks:
       - local
 
@@ -66,7 +66,7 @@ services:
     restart: on-failure:10
     depends_on:
       - kafka
-      # - clickhouse
+      - clickhouse
     ports:
       - 8192:8192
     networks:
@@ -78,11 +78,9 @@ services:
       dockerfile: ./main_service/Dockerfile
     restart: on-failure:10
     depends_on:
-      - redis
+      - userdata_postgres
       - post_service
       - kafka
-      # condition:
-      #   - service_healthy
       - stat_service
     ports:
       - 4200:4200

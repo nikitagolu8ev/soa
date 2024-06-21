@@ -23,8 +23,8 @@ type StatServer struct {
 }
 
 type Event struct {
-	PostId int    `json:"post_id"`
-	UserId string `json:"user_id"`
+	PostId int32 `json:"post_id"`
+	UserId int32 `json:"user_id"`
 }
 
 func (server *StatServer) InitClickhouse() error {
@@ -54,17 +54,17 @@ func (server *StatServer) InitClickhouse() error {
 	// 	return err
 	// }
 
-	if err = server.DataBase.Exec(context.Background(), `
-	CREATE TABLE IF NOT EXISTS likes
-	(
-		post_id UInt64,
-		user String,
-		timestamp DateTime,
-	) ENGINE = ReplacingMergeTree
-	PRIMARY KEY (post_id, user)
-	`); err != nil {
-		return err
-	}
+	// if err = server.DataBase.Exec(context.Background(), `
+	// CREATE TABLE IF NOT EXISTS likes
+	// (
+	// 	post_id Int32,
+	// 	user Int32,
+	// 	timestamp DateTime,
+	// ) ENGINE = ReplacingMergeTree
+	// PRIMARY KEY (post_id, user)
+	// `); err != nil {
+	// 	return err
+	// }
 
 	// if err = server.DataBase.Exec(context.Background(), `
 	// CREATE MATERIALIZED VIEW IF NOT EXISTS likes_consumer TO likes
@@ -74,17 +74,17 @@ func (server *StatServer) InitClickhouse() error {
 	// }
 
 	// View table
-	if err = server.DataBase.Exec(context.Background(), `
-	CREATE TABLE IF NOT EXISTS views
-	(
-		post_id UInt64,
-		user String,
-		timestamp DateTime,
-	) ENGINE = ReplacingMergeTree
-	PRIMARY KEY (post_id, user)
-	`); err != nil {
-		return err
-	}
+	// if err = server.DataBase.Exec(context.Background(), `
+	// CREATE TABLE IF NOT EXISTS views
+	// (
+	// 	post_id Int32,
+	// 	user Int32,
+	// 	timestamp DateTime,
+	// ) ENGINE = ReplacingMergeTree
+	// PRIMARY KEY (post_id, user)
+	// `); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -115,7 +115,7 @@ func (server StatServer) ConsumeFromKafka(topic string, db_name string) {
 			continue
 		}
 
-		insert_query := fmt.Sprintf(`INSERT INTO %s (post_id, user, timestamp) VALUES (%d, '%s', now())`, db_name, event.PostId, event.UserId)
+		insert_query := fmt.Sprintf(`INSERT INTO %s (post_id, user, timestamp) VALUES (%d, %d, now())`, db_name, event.PostId, event.UserId)
 		err := server.DataBase.AsyncInsert(context.Background(), insert_query, true)
 		if err != nil {
 			fmt.Printf("Failed to insert into Clickhouse: %v\n", err)
@@ -136,7 +136,7 @@ func (server StatServer) Ping(writer http.ResponseWriter, request *http.Request)
 func (server StatServer) GetLikes(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 64)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
 	if err != nil {
 		http.Error(writer, fmt.Sprintf("Can't parse post id: %v", err), http.StatusBadRequest)
 		return

@@ -24,12 +24,12 @@ type PostServer struct {
 }
 
 func (server *PostServer) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.CreatePostResponse, error) {
-	var post_id uint32
+	var post_id int32
 	if err := server.DataBase.QueryRowContext(
 		ctx,
-		"INSERT INTO posts (title, author, content) VALUES ($1, $2, $3) RETURNING post_id",
+		"INSERT INTO posts (title, author_id, content) VALUES ($1, $2, $3) RETURNING post_id",
 		request.Title,
-		request.Author,
+		request.AuthorId,
 		request.Content,
 	).Scan(&post_id); err != nil {
 		return nil, fmt.Errorf("failed to create post: %s", err)
@@ -40,11 +40,11 @@ func (server *PostServer) CreatePost(ctx context.Context, request *pb.CreatePost
 func (server *PostServer) UpdatePost(ctx context.Context, request *pb.UpdatePostRequest) (*emptypb.Empty, error) {
 	exec, err := server.DataBase.ExecContext(
 		ctx,
-		"UPDATE posts SET title = $1, content = $2 WHERE post_id = $3 AND author = $4",
+		"UPDATE posts SET title = $1, content = $2 WHERE post_id = $3 AND author_id = $4",
 		request.Title,
 		request.Content,
 		request.PostId,
-		request.Author,
+		request.AuthorId,
 	)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update post: %v", err)
@@ -62,9 +62,9 @@ func (server *PostServer) UpdatePost(ctx context.Context, request *pb.UpdatePost
 func (server *PostServer) DeletePost(ctx context.Context, request *pb.DeletePostRequest) (*emptypb.Empty, error) {
 	exec, err := server.DataBase.ExecContext(
 		ctx,
-		"DELETE FROM posts WHERE post_id = $1 AND author = $2",
+		"DELETE FROM posts WHERE post_id = $1 AND author_id = $2",
 		request.PostId,
-		request.Author,
+		request.AuthorId,
 	)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete post: %v", err)
@@ -83,9 +83,9 @@ func (server *PostServer) GetPostById(ctx context.Context, request *pb.GetPostBy
 	var post pb.Post
 	if err := server.DataBase.QueryRowContext(
 		ctx,
-		"SELECT post_id, title, author, content FROM posts WHERE post_id = $1",
+		"SELECT post_id, title, author_id, content FROM posts WHERE post_id = $1",
 		request.PostId,
-	).Scan(&post.PostId, &post.Title, &post.Author, &post.Content); err != nil {
+	).Scan(&post.PostId, &post.Title, &post.AuthorId, &post.Content); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "failed to get post: %s", err)
 	}
 	return &pb.GetPostByIdResponse{Post: &post}, nil
@@ -95,7 +95,7 @@ func (server *PostServer) GetPostsOnPage(ctx context.Context, request *pb.GetPos
 	var posts []*pb.Post
 	rows, err := server.DataBase.QueryContext(
 		ctx,
-		"SELECT post_id, title, author, content FROM posts LIMIT $1 OFFSET $2",
+		"SELECT post_id, title, author_id, content FROM posts LIMIT $1 OFFSET $2",
 		server.PostsPerPage,
 		server.PostsPerPage*uint(request.PageId),
 	)
@@ -106,7 +106,7 @@ func (server *PostServer) GetPostsOnPage(ctx context.Context, request *pb.GetPos
 
 	for rows.Next() {
 		var post pb.Post
-		if err = rows.Scan(&post.PostId, &post.Title, &post.Author, &post.Content); err != nil {
+		if err = rows.Scan(&post.PostId, &post.Title, &post.AuthorId, &post.Content); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to iterate posts page: %s", err)
 		}
 		posts = append(posts, &post)
@@ -130,16 +130,6 @@ func main() {
 	defer db.Close()
 
 	eh.CheckCritical(db.Ping(), "Can't reach post service database")
-
-	_, err = db.Exec(`
-	CREATE TABLE IF NOT EXISTS posts (
-		post_id SERIAL PRIMARY KEY,
-		title TEXT,
-		author TEXT,
-		content TEXT
-	)
-	`)
-	eh.CheckCritical(err, "Can't create posts table")
 
 	post_server := grpc.NewServer()
 	pb.RegisterPostManagerServer(post_server, &PostServer{DataBase: db, PostsPerPage: *posts_per_page})

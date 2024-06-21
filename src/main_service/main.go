@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"crypto/rsa"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"net/http"
 	"os"
@@ -15,8 +16,9 @@ import (
 	eh "error_handling"
 	pb "proto"
 
+	_ "github.com/lib/pq"
+
 	"github.com/IBM/sarama"
-	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
@@ -26,10 +28,12 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+type UserAuth struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
+}
+
 type UserData struct {
-	Login       string `json:"login"`
-	UserId      int    `json:"user_id"`
-	Password    string `json:"password"`
 	Name        string `json:"name"`
 	Surname     string `json:"surname"`
 	DateOfBirth string `json:"date_of_birth"`
@@ -38,7 +42,7 @@ type UserData struct {
 }
 
 type MainServer struct {
-	RedisDB          *redis.Client
+	DataBase         *sql.DB
 	KafkaProducer    sarama.SyncProducer
 	PostServerClient pb.PostManagerClient
 	PrivateKey       *rsa.PrivateKey
@@ -46,39 +50,38 @@ type MainServer struct {
 }
 
 type Event struct {
-	PostId int    `json:"post_id"`
-	UserId string `json:"user_id"`
+	PostId int32 `json:"post_id"`
+	UserId int32 `json:"user_id"`
 }
 
-func (server MainServer) GetUserId(login string) uint64 {
-	h := fnv.New64a()
-	h.Write([]byte(login))
-	return h.Sum64()
+func (server MainServer) GetUserId(ctx context.Context, login string) *int32 {
+	var user_id int32
+	if server.DataBase.QueryRowContext(ctx, `SELECT user_id FROM user_data WHERE login = $1`, login).Scan(&user_id) != nil {
+		return nil
+	}
+	return &user_id
 }
 
 func (server MainServer) Register(writer http.ResponseWriter, request *http.Request) {
-	var user_data UserData
-	if eh.CheckHttp(json.NewDecoder(request.Body).Decode(&user_data), "Invalid user data", http.StatusBadRequest, writer) {
+	var user_auth UserAuth
+	if eh.CheckHttp(json.NewDecoder(request.Body).Decode(&user_auth), "Invalid user data", http.StatusBadRequest, writer) {
 		return
 	}
-	exists, err := server.RedisDB.Exists(request.Context(), user_data.Login).Result()
-	if eh.CheckHttp(err, "Redis database error", http.StatusInternalServerError, writer) ||
-		eh.CheckConditionHttp(exists != 0, "User with this login already exists", http.StatusConflict, writer) {
+	if eh.CheckConditionHttp(server.GetUserId(request.Context(), user_auth.Login) != nil, "User with this login already exists", http.StatusConflict, writer) {
 		return
 	}
-	hashed_password, err := bcrypt.GenerateFromPassword([]byte(user_data.Password), bcrypt.DefaultCost)
-	if eh.CheckHttp(err, fmt.Sprintf("Bad password `%s`", user_data.Password), http.StatusBadRequest, writer) {
+	hashed_password, err := bcrypt.GenerateFromPassword([]byte(user_auth.Password), bcrypt.DefaultCost)
+	if eh.CheckHttp(err, fmt.Sprintf("Bad password `%s`", user_auth.Password), http.StatusBadRequest, writer) {
 		return
 	}
-	user_data.Password = string(hashed_password)
-	json_user, _ := json.Marshal(user_data)
-	if eh.CheckHttp(server.RedisDB.Set(request.Context(), user_data.Login, json_user, 0).Err(),
-		"Redis database error", http.StatusInternalServerError, writer) {
+	var user_id int32
+	if eh.CheckHttp(server.DataBase.QueryRowContext(request.Context(), `INSERT INTO user_data (login, hashed_password) VALUES ($1, $2) RETURNING user_id`,
+		user_auth.Login, string(hashed_password)).Scan(&user_id), "Can't update user database", http.StatusInternalServerError, writer) {
 		return
 	}
 
 	token, err := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"login": user_data.Login,
+		"user_id": user_id,
 	}).SignedString(server.PrivateKey)
 	if eh.CheckHttp(err, "Can't sign token", http.StatusInternalServerError, writer) {
 		return
@@ -93,34 +96,25 @@ func (server MainServer) Register(writer http.ResponseWriter, request *http.Requ
 }
 
 func (server MainServer) Login(writer http.ResponseWriter, request *http.Request) {
-	var user_data UserData
+	var user_data UserAuth
 	if eh.CheckHttp(json.NewDecoder(request.Body).Decode(&user_data), "Invalid user data", http.StatusBadRequest, writer) {
 		return
 	}
-	json_user, err := server.RedisDB.Get(request.Context(), user_data.Login).Result()
-	if eh.CheckConditionHttp(err == redis.Nil, fmt.Sprintf("User with login `%v` doesn't exist", user_data.Login), http.StatusBadRequest, writer) ||
-		eh.CheckHttp(err, "Redis database error", http.StatusInternalServerError, writer) {
+	var user_id int32
+	var hashed_password string
+	err := server.DataBase.QueryRowContext(request.Context(), `SELECT user_id, hashed_password FROM user_data WHERE login = $1`,
+		user_data.Login).Scan(&user_id, &hashed_password)
+	if eh.CheckConditionHttp(err == sql.ErrNoRows, "No registered user with such login", http.StatusBadRequest, writer) ||
+		eh.CheckHttp(err, "Can't reach user database", http.StatusInternalServerError, writer) {
 		return
 	}
-	var saved_user_data UserData
-	json.Unmarshal([]byte(json_user), &saved_user_data)
-	if eh.CheckHttp(bcrypt.CompareHashAndPassword([]byte(saved_user_data.Password), []byte(user_data.Password)),
+	if eh.CheckHttp(bcrypt.CompareHashAndPassword([]byte(hashed_password), []byte(user_data.Password)),
 		"Invalid password", http.StatusBadRequest, writer) {
-		return
-	}
-	hashed_password, err := bcrypt.GenerateFromPassword([]byte(user_data.Password), bcrypt.DefaultCost)
-	if eh.CheckHttp(err, "Bad password", http.StatusBadRequest, writer) {
-		return
-	}
-
-	user_data.Password = string(hashed_password)
-	user_json, _ := json.Marshal(user_data)
-	if eh.CheckHttp(server.RedisDB.Set(request.Context(), user_data.Login, user_json, 0).Err(), "Redis database error", http.StatusInternalServerError, writer) {
 		return
 	}
 
 	token, err := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"login": user_data.Login,
+		"user_id": user_id,
 	}).SignedString(server.PrivateKey)
 	if eh.CheckHttp(err, "Can't sign token", http.StatusInternalServerError, writer) {
 		return
@@ -133,10 +127,10 @@ func (server MainServer) Login(writer http.ResponseWriter, request *http.Request
 	writer.WriteHeader(http.StatusOK)
 }
 
-func (server MainServer) AuthorisedUser(request *http.Request) (string, error) {
+func (server MainServer) AuthorisedUser(request *http.Request) (int32, error) {
 	cookie, err := request.Cookie("token")
 	if err != nil {
-		return "", errors.New("no authorized user")
+		return 0, errors.New("no authorized user")
 	}
 
 	claims := jwt.MapClaims{}
@@ -147,9 +141,9 @@ func (server MainServer) AuthorisedUser(request *http.Request) (string, error) {
 		return server.PublicKey, nil
 	})
 	if err != nil {
-		return "", errors.New("no authorized user")
+		return 0, errors.New("no authorized user")
 	}
-	return claims["login"].(string), nil
+	return int32(claims["user_id"].(float64)), nil
 }
 
 func (server MainServer) UpdateUserData(writer http.ResponseWriter, request *http.Request) {
@@ -157,27 +151,15 @@ func (server MainServer) UpdateUserData(writer http.ResponseWriter, request *htt
 	if eh.CheckHttp(json.NewDecoder(request.Body).Decode(&user_data), "Invalid user data", http.StatusBadRequest, writer) {
 		return
 	}
-	login, err := server.AuthorisedUser(request)
+	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
 	}
-	user_data.Login = login
 
-	json_saved_user_data, err := server.RedisDB.Get(request.Context(), login).Result()
-	if eh.CheckConditionHttp(err == redis.Nil, fmt.Sprintf("User with login `%v` doesn't exist", user_data.Login), http.StatusBadRequest, writer) ||
-		eh.CheckHttp(err, "Redis database error", http.StatusInternalServerError, writer) {
-		return
-	}
-
-	var saved_user_data UserData
-	json.Unmarshal([]byte(json_saved_user_data), &saved_user_data)
-
-	user_data.Login = saved_user_data.Login
-	user_data.Password = saved_user_data.Password
 	json_user, _ := json.Marshal(user_data)
 
-	if eh.CheckHttp(server.RedisDB.Set(request.Context(), user_data.Login, json_user, 0).Err(),
-		"Redis database error", http.StatusInternalServerError, writer) {
+	_, err = server.DataBase.ExecContext(request.Context(), `UPDATE user_data SET data = $1 where user_id = $2`, json_user, user_id)
+	if eh.CheckHttp(err, "main database error", http.StatusInternalServerError, writer) {
 		return
 	}
 
@@ -185,7 +167,7 @@ func (server MainServer) UpdateUserData(writer http.ResponseWriter, request *htt
 }
 
 func (server MainServer) CreatePost(writer http.ResponseWriter, request *http.Request) {
-	login, err := server.AuthorisedUser(request)
+	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
 	}
@@ -199,7 +181,7 @@ func (server MainServer) CreatePost(writer http.ResponseWriter, request *http.Re
 	if eh.CheckHttp(protojson.Unmarshal(body, &grpc_request), "Invalud request", http.StatusBadRequest, writer) {
 		return
 	}
-	grpc_request.Author = login
+	grpc_request.AuthorId = user_id
 
 	grpc_response, err := server.PostServerClient.CreatePost(request.Context(), &grpc_request)
 	status.FromError(err)
@@ -215,14 +197,14 @@ func (server MainServer) CreatePost(writer http.ResponseWriter, request *http.Re
 }
 
 func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Request) {
-	login, err := server.AuthorisedUser(request)
+	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
 	}
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
@@ -237,8 +219,8 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 		http.Error(writer, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	grpc_request.Author = login
-	grpc_request.PostId = uint32(post_id)
+	grpc_request.AuthorId = user_id
+	grpc_request.PostId = int32(post_id)
 
 	_, err = server.PostServerClient.UpdatePost(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -250,21 +232,21 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 }
 
 func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Request) {
-	login, err := server.AuthorisedUser(request)
+	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
 	}
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.DeletePostRequest{}
-	grpc_request.Author = login
-	grpc_request.PostId = uint32(post_id)
+	grpc_request.AuthorId = user_id
+	grpc_request.PostId = int32(post_id)
 
 	_, err = server.PostServerClient.DeletePost(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -277,13 +259,13 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.PostId = uint32(post_id)
+	grpc_request.PostId = int32(post_id)
 
 	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -301,13 +283,13 @@ func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.R
 func (server MainServer) GetPostsOnPage(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	page_id_str := vars["page_id"]
-	page_id, err := strconv.ParseUint(page_id_str, 10, 32)
+	page_id, err := strconv.ParseInt(page_id_str, 10, 32)
 	if eh.CheckHttp(err, "Can't parse page id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostsOnPageRequest{}
-	grpc_request.PageId = uint32(page_id)
+	grpc_request.PageId = int32(page_id)
 
 	grpc_response, err := server.PostServerClient.GetPostsOnPage(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -327,21 +309,21 @@ func (server MainServer) GetPostsOnPage(writer http.ResponseWriter, request *htt
 }
 
 func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Request) {
-	login, err := server.AuthorisedUser(request)
+	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
 	}
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	var like Event
-	like.PostId = int(post_id)
-	like.UserId = login
+	like.PostId = int32(post_id)
+	like.UserId = user_id
 
 	message_payload, err := json.Marshal(like)
 	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
@@ -361,21 +343,21 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 }
 
 func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Request) {
-	login, err := server.AuthorisedUser(request)
+	user_id, err := server.AuthorisedUser(request)
 	if eh.CheckHttp(err, "User is unauthorized", http.StatusUnauthorized, writer) {
 		return
 	}
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseUint(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	var view Event
-	view.PostId = int(post_id)
-	view.UserId = login
+	view.PostId = int32(post_id)
+	view.UserId = user_id
 
 	message_payload, err := json.Marshal(view)
 	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
@@ -399,7 +381,6 @@ func main() {
 	public_key_path := flag.String("public_key_path", "", "path to public key file")
 	server_port := flag.Int("port", 4200, "server port")
 	post_server_port := flag.Int("post_server_port", 50051, "post server port")
-	redis_port := flag.Int("redis_port", 6379, "redis database port")
 	flag.Parse()
 
 	eh.CheckConditionCritical(*private_key_path == "", "No path to private key file")
@@ -425,11 +406,9 @@ func main() {
 	server.PublicKey, err = jwt.ParseRSAPublicKeyFromPEM(public_key)
 	eh.CheckCritical(err, "jwt public key")
 
-	server.RedisDB = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("redis:%d", *redis_port),
-		Password: "",
-		DB:       0,
-	})
+	server.DataBase, err = sql.Open("postgres", "host=userdata_postgres port=5432 user=main_service password=password dbname=userdata_db sslmode=disable")
+	eh.CheckCritical(err, "Failed to open main service database")
+	eh.CheckCritical(server.DataBase.Ping(), "Failed to reach main service database")
 
 	router := mux.NewRouter()
 	router.HandleFunc("/users/register", server.Register).Methods("POST")
