@@ -26,9 +26,9 @@ type StatServer struct {
 }
 
 type Event struct {
-	PostId   int32 `json:"post_id"`
-	AuthorId int32 `json:"author_id"`
-	UserId   int32 `json:"user_id"`
+	PostId   int64 `json:"post_id"`
+	AuthorId int64 `json:"author_id"`
+	UserId   int64 `json:"user_id"`
 }
 
 func (server *StatServer) InitClickhouse() error {
@@ -95,7 +95,7 @@ func (server StatServer) GetPostStats(ctx context.Context, request *pb.GetPostSt
 	if err := server.DataBase.QueryRow(ctx, fmt.Sprintf(`SELECT count(user_id) AS viewed FROM views FINAL where post_id = %d`, post_id)).Scan(&viewed); err != nil {
 		return nil, status.Errorf(codes.Internal, "Can't select from stat database: %v", err)
 	}
-	return &pb.GetPostStatsResponse{PostId: post_id, Likes: uint32(liked), Views: uint32(viewed)}, nil
+	return &pb.GetPostStatsResponse{PostId: post_id, Likes: liked, Views: viewed}, nil
 }
 
 func (server StatServer) GetTopPosts(ctx context.Context, request *pb.GetTopPostsRequest) (*pb.GetTopPostsResponse, error) {
@@ -137,11 +137,9 @@ func (server StatServer) GetTopPosts(ctx context.Context, request *pb.GetTopPost
 	var posts []*pb.PostStats
 	for rows.Next() {
 		var post pb.PostStats
-		var stat uint64
-		if err = rows.Scan(&post.PostId, &post.AuthorId, &stat); err != nil {
+		if err = rows.Scan(&post.PostId, &post.AuthorId, &post.Stat); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to iterate stats top results: %s", err)
 		}
-		post.Stat = uint32(stat)
 		posts = append(posts, &post)
 	}
 	if err := rows.Err(); err != nil {
@@ -169,11 +167,9 @@ func (server StatServer) GetTopAuthors(ctx context.Context, _ *emptypb.Empty) (*
 	var authors []*pb.AuthorStats
 	for rows.Next() {
 		var author pb.AuthorStats
-		var likes uint64
-		if err = rows.Scan(&author.AuthorId, &likes); err != nil {
+		if err = rows.Scan(&author.AuthorId, &author.Likes); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to iterate stats top results: %s", err)
 		}
-		author.Likes = uint32(likes)
 		authors = append(authors, &author)
 	}
 	if err := rows.Err(); err != nil {

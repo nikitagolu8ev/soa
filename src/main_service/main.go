@@ -52,20 +52,20 @@ type MainServer struct {
 }
 
 type Event struct {
-	PostId   int32 `json:"post_id"`
-	AuthorId int32 `json:"author_id"`
-	UserId   int32 `json:"user_id"`
+	PostId   int64 `json:"post_id"`
+	AuthorId int64 `json:"author_id"`
+	UserId   int64 `json:"user_id"`
 }
 
-func (server MainServer) GetUserId(ctx context.Context, login string) *int32 {
-	var user_id int32
+func (server MainServer) GetUserId(ctx context.Context, login string) *int64 {
+	var user_id int64
 	if server.DataBase.QueryRowContext(ctx, `SELECT user_id FROM user_data WHERE login = $1`, login).Scan(&user_id) != nil {
 		return nil
 	}
 	return &user_id
 }
 
-func (server MainServer) GetUserLogin(ctx context.Context, user_id int32) (string, error) {
+func (server MainServer) GetUserLogin(ctx context.Context, user_id int64) (string, error) {
 	var login string
 	if err := server.DataBase.QueryRowContext(ctx, `SELECT login FROM user_data WHERE user_id = $1`, user_id).Scan(&login); err != nil {
 		return "", err
@@ -86,7 +86,7 @@ func (server MainServer) Register(writer http.ResponseWriter, request *http.Requ
 	if eh.CheckHttp(err, fmt.Sprintf("Bad password `%s`", user_auth.Password), http.StatusBadRequest, writer) {
 		return
 	}
-	var user_id int32
+	var user_id int64
 	if eh.CheckHttp(server.DataBase.QueryRowContext(request.Context(), `INSERT INTO user_data (login, hashed_password) VALUES ($1, $2) RETURNING user_id`,
 		user_auth.Login, string(hashed_password)).Scan(&user_id), "Can't update user database", http.StatusInternalServerError, writer) {
 		return
@@ -112,7 +112,7 @@ func (server MainServer) Login(writer http.ResponseWriter, request *http.Request
 	if eh.CheckHttp(json.NewDecoder(request.Body).Decode(&user_data), "Invalid user data", http.StatusBadRequest, writer) {
 		return
 	}
-	var user_id int32
+	var user_id int64
 	var hashed_password string
 	err := server.DataBase.QueryRowContext(request.Context(), `SELECT user_id, hashed_password FROM user_data WHERE login = $1`,
 		user_data.Login).Scan(&user_id, &hashed_password)
@@ -139,7 +139,7 @@ func (server MainServer) Login(writer http.ResponseWriter, request *http.Request
 	writer.WriteHeader(http.StatusOK)
 }
 
-func (server MainServer) AuthorisedUser(request *http.Request) (int32, error) {
+func (server MainServer) AuthorisedUser(request *http.Request) (int64, error) {
 	cookie, err := request.Cookie("token")
 	if err != nil {
 		return 0, errors.New("no authorized user")
@@ -155,7 +155,7 @@ func (server MainServer) AuthorisedUser(request *http.Request) (int32, error) {
 	if err != nil {
 		return 0, errors.New("no authorized user")
 	}
-	return int32(claims["user_id"].(float64)), nil
+	return int64(claims["user_id"].(float64)), nil
 }
 
 func (server MainServer) UpdateUserData(writer http.ResponseWriter, request *http.Request) {
@@ -216,7 +216,7 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 64)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
@@ -232,7 +232,7 @@ func (server MainServer) UpdatePost(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	grpc_request.AuthorId = user_id
-	grpc_request.PostId = int32(post_id)
+	grpc_request.PostId = post_id
 
 	_, err = server.PostServerClient.UpdatePost(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -251,22 +251,20 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 64)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.DeletePostRequest{}
 	grpc_request.AuthorId = user_id
-	grpc_request.PostId = int32(post_id)
+	grpc_request.PostId = post_id
 
 	_, err = server.PostServerClient.DeletePost(request.Context(), &grpc_request)
 	s, _ := status.FromError(err)
 	if eh.CheckGrpcHttp(s, "post service grpc error", writer) {
 		return
 	}
-
-	fmt.Println(grpc_request)
 
 	_, err = server.StatServerClient.DeletePost(request.Context(), &grpc_request)
 	s, _ = status.FromError(err)
@@ -279,13 +277,13 @@ func (server MainServer) DeletePost(writer http.ResponseWriter, request *http.Re
 func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 64)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.PostId = int32(post_id)
+	grpc_request.PostId = post_id
 
 	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -303,13 +301,13 @@ func (server MainServer) GetPostById(writer http.ResponseWriter, request *http.R
 func (server MainServer) GetPostsOnPage(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	page_id_str := vars["page_id"]
-	page_id, err := strconv.ParseInt(page_id_str, 10, 32)
+	page_id, err := strconv.ParseInt(page_id_str, 10, 64)
 	if eh.CheckHttp(err, "Can't parse page id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostsOnPageRequest{}
-	grpc_request.PageId = int32(page_id)
+	grpc_request.PageId = page_id
 
 	grpc_response, err := server.PostServerClient.GetPostsOnPage(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -336,13 +334,13 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 64)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.PostId = int32(post_id)
+	grpc_request.PostId = post_id
 
 	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -353,7 +351,7 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 	author_id := grpc_response.Post.AuthorId
 
 	var like Event
-	like.PostId = int32(post_id)
+	like.PostId = int64(post_id)
 	like.UserId = user_id
 	like.AuthorId = author_id
 
@@ -382,13 +380,13 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 64)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostByIdRequest{}
-	grpc_request.PostId = int32(post_id)
+	grpc_request.PostId = post_id
 
 	grpc_response, err := server.PostServerClient.GetPostById(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)
@@ -399,7 +397,7 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 	author_id := grpc_response.Post.AuthorId
 
 	var view Event
-	view.PostId = int32(post_id)
+	view.PostId = post_id
 	view.AuthorId = author_id
 	view.UserId = user_id
 
@@ -423,13 +421,13 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 func (server MainServer) GetPostStats(writer http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	post_id_str := vars["post_id"]
-	post_id, err := strconv.ParseInt(post_id_str, 10, 32)
+	post_id, err := strconv.ParseInt(post_id_str, 10, 64)
 	if eh.CheckHttp(err, "Can't parse post id", http.StatusBadRequest, writer) {
 		return
 	}
 
 	grpc_request := pb.GetPostStatsRequest{}
-	grpc_request.PostId = int32(post_id)
+	grpc_request.PostId = post_id
 
 	grpc_response, err := server.StatServerClient.GetPostStats(request.Context(), &grpc_request)
 	status, _ := status.FromError(err)

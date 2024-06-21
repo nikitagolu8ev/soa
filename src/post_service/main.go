@@ -24,7 +24,7 @@ type PostServer struct {
 }
 
 func (server *PostServer) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.CreatePostResponse, error) {
-	var post_id int32
+	var post_id int64
 	if err := server.DataBase.QueryRowContext(
 		ctx,
 		"INSERT INTO posts (title, author_id, content) VALUES ($1, $2, $3) RETURNING post_id",
