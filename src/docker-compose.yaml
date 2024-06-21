@@ -1,0 +1,92 @@
+version: "3.9"
+services:
+  userdata_postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: userdata_db
+      POSTGRES_USER: main_service
+      POSTGRES_PASSWORD: 'password'
+    volumes:
+      - ./main_service/db/init:/docker-entrypoint-initdb.d
+    networks:
+      - local
+
+  posts_postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: posts_db
+      POSTGRES_USER: post_service
+      POSTGRES_PASSWORD: 'password'
+    volumes:
+      - ./post_service/db/init:/docker-entrypoint-initdb.d
+    networks:
+      - local
+
+  post_service:
+    build: 
+      context: .
+      dockerfile: ./post_service/Dockerfile
+    restart: on-failure:10
+    depends_on:
+      - posts_postgres
+    ports:
+      - 50051:50051
+    networks:
+      - local
+
+  clickhouse:
+    image: 'clickhouse/clickhouse-server:latest'
+    restart: on-failure:10
+    ports:
+      - 8123:8123
+      - 9000:9000
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    volumes:
+      - ./stat_service/db/init:/docker-entrypoint-initdb.d
+    networks:
+      - local
+
+  kafka:
+    image: 'bitnami/kafka:3.6'
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+    networks:
+      - local
+
+  stat_service:
+    build: 
+      context: .
+      dockerfile: ./stat_service/Dockerfile
+    restart: on-failure:10
+    depends_on:
+      - kafka
+      - clickhouse
+    ports:
+      - 8192:8192
+    networks:
+      - local
+
+  main_service:
+    build: 
+      context: .
+      dockerfile: ./main_service/Dockerfile
+    restart: on-failure:10
+    depends_on:
+      - userdata_postgres
+      - post_service
+      - kafka
+      - stat_service
+    ports:
+      - 4200:4200
+    networks:
+      - local
+
+networks:
+  local:
+    driver: bridge

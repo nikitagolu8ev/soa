@@ -1,0 +1,460 @@
+openapi: 3.0.0
+info:
+  title: User Management API
+  version: 1.0.0
+paths:
+  /users/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUser'
+      responses:
+        '200':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid user data
+        '409':
+          description: User with this login already exists
+        '500':
+          description: Internal server error
+  /users/login:
+    post:
+      summary: Log in user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginUser'
+      responses:
+        '200':
+          description: User authenticated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid user data
+        '500':
+          description: Internal server error
+  /users:
+    put:
+      summary: Update user data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPost'
+      responses:
+        '200':
+          description: User data updated successfully
+        '400':
+          description: Invalid user data
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /users/top:
+    get:
+      summary: Get top authors ordered by likes
+      responses:
+        '200':
+          description: Top authors returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopAuthors'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+    
+  /posts:
+    post:
+      summary: Create post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPost'
+      responses:
+        '200':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostId'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/{post_id}:
+    put:
+      summary: Update post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Post'
+      responses:
+        '200':
+          description: Post updated successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+    delete:
+      summary: Delete post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post deleted successfully
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+    get:
+      summary: Get post by id
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post found successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+  /posts/page/{page_id}:
+    get:
+      summary: Get posts on page
+      parameters:
+        - name: page_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Posts on page found successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+
+  /posts/like/{post_id}:
+    get:
+      summary: Like post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Author'
+      responses:
+        '200':
+          description: Post was successfully liked
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+
+  /posts/view/{post_id}:
+    get:
+      summary: View post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Author'
+      responses:
+        '200':
+          description: Post was successfully viewed
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+
+  /posts/stats/{post_id}:
+    get:
+      summary: Get post statistic
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post statistics successfully found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostStats'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+
+  /posts/top/{order_by}:
+    get:
+      summary: Get top posts ordered by parameter
+      parameters:
+        - name: order_by
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Top posts returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopPosts'
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized user
+        '500':
+          description: Internal server error
+          
+components:
+  schemas:
+    NewUser:
+      type: object
+      properties:
+        login:
+          type: string
+          description: User's login
+          example: nickname
+        password:
+          type: string
+          format: password
+          description: User's password
+          example: 3L45DeR
+    UpdateUser:
+      type: object
+      properties:
+        name:
+          type: string
+          description: User's name
+          example: Ivan
+        surname:
+          type: string
+          description: User's surname
+          example: Ivanov
+        dateOfBirth:
+          type: string
+          format: date
+          description: User's date of birth
+          example: 1999-12-31
+        Email:
+          type: string
+          format: email
+          description: User's email
+          example: address@gmail.com
+        PhoneNumber:
+          type: string
+          description: User's phone number
+          example: '+79326482233'
+    LoginUser:
+      type: object
+      properties:
+        Login:
+          type: string
+          description: User's login
+          example: nickname
+        Password:
+          type: string
+          format: password
+          description: User's password
+          example: 3L45DeR
+    NewPost:
+      type: object
+      properties:
+        Title:
+          type: string
+          description: Post's title
+          example: Title
+        Content:
+          type: string
+          description: Post's content
+          example: Some text
+    PostId:
+      type: object
+      properties:
+        Title:
+          type: integer
+          desciption: Post's identifier
+          example: 32
+    Post:
+      type: object
+      properties:
+        PostId:
+          type: integer
+          description: Post's identifier
+          example: 32
+        Title:
+          type: string
+          description: Post's title
+          example: Title
+        Author:
+          type: string
+          desciption: Post's creator login
+          example: nickname
+        Content:
+          type: string
+          description: Post's content
+          example: Some text
+    Page:
+      type: object
+      properties:
+        Posts:
+          type: array
+          desciption: Posts on page
+          items:
+            type: object
+            properties:
+              PostId:
+                type: integer
+                description: Post's identifier
+                example: 32
+              Title:
+                type: string
+                description: Post's title
+                example: Title
+              Author:
+                type: string
+                desciption: Post's creator login
+                example: nickname
+              Content:
+                type: string
+                description: Post's content
+                example: Some text
+    PostStats:
+      type: object
+      properties:
+        PostId:
+          type: integer
+          description: Post's identifier
+          example: 32
+        Likes:
+          type: integer
+          desciption: The amount of likes that post has
+          example: 2
+        Views:
+          type: integer
+          desciption: The amount of views that post has
+          example: 50
+    TopPosts:
+      type: object
+      properties:
+        PostStats:
+          type: array
+          items:
+          PostId:
+            type: integer
+            description: Post's identifier
+            example: 32
+          Author:
+            type: string
+            desciption: The post's author login
+            example: nickname
+          Stat:
+            type: integer
+            desciption: The stat that was chosen as order
+            example: 50
+    TopAuthors:
+      type: object
+      properties:
+        AuthorStats:
+          type: array
+          items:
+          Author:
+            type: string
+            desciption: The post's author login
+            example: nickname
+          Likes:
+            type: integer
+            desciption: Total amount of likes recieved by author
+            example: 12
+    Author:
+      type: object
+      properties:
+        AuthorId:
+          type: integer
+          desciption: The post's author id
+          example: 32
+
+    User:
+      type: object
+      properties:
+        UserId:
+          type: int
+          description: User's id
+          example: 32
