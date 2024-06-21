@@ -2,18 +2,15 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
-	"os"
 
 	eh "error_handling"
 	pb "proto"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/IBM/sarama"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -45,44 +42,6 @@ func (server *StatServer) InitClickhouse() error {
 	}
 
 	return nil
-}
-
-func ConsumeFromKafka(db driver.Conn, topic string, db_name string) {
-	kafka_addr := fmt.Sprintf("kafka:%d", 9092)
-	consumer, err := sarama.NewConsumer([]string{kafka_addr}, nil)
-	eh.CheckCritical(err, "Failed to create kafka consumer")
-	defer func() {
-		eh.CheckCritical(consumer.Close(), "Failed to close kafka consumer")
-	}()
-
-	partition_consumer, err := consumer.ConsumePartition(topic, 0, sarama.OffsetNewest)
-	eh.CheckCritical(err, "Failed to create kafka partition consumer")
-	defer func() {
-		eh.CheckCritical(err, "Failed to create kafka partition consumer")
-		if err = partition_consumer.Close(); err != nil {
-			fmt.Printf("Failed to close kafka partition consumer: %v\n", err)
-			os.Exit(1)
-		}
-	}()
-
-	for {
-		msg := <-partition_consumer.Messages()
-		var event Event
-		if err = json.Unmarshal(msg.Value, &event); err != nil {
-			fmt.Printf("Failed to unmarshal kafka message: %v\n", err)
-			continue
-		}
-
-		insert_query := fmt.Sprintf(`INSERT INTO %s (post_id, author_id, user_id, timestamp) VALUES (%d, %d, %d, now())`,
-			db_name, event.PostId, event.AuthorId, event.UserId)
-		err := db.AsyncInsert(context.Background(), insert_query, true)
-		if err != nil {
-			fmt.Printf("Failed to insert into Clickhouse: %v\n", err)
-			os.Exit(1)
-		} else {
-			fmt.Println("Inserted")
-		}
-	}
 }
 
 func (server StatServer) GetPostStats(ctx context.Context, request *pb.GetPostStatsRequest) (*pb.GetPostStatsResponse, error) {
@@ -196,7 +155,6 @@ func (server StatServer) DeletePost(ctx context.Context, request *pb.DeletePostR
 
 func main() {
 	service_port := flag.Uint("service_port", 8192, "The stat server port")
-	// kafka_port := flag.Uint("kafka_port", 9092, "The kafka broker port")
 	flag.Parse()
 
 	db, err := clickhouse.Open(&clickhouse.Options{
@@ -209,9 +167,6 @@ func main() {
 	eh.CheckCritical(err, "Couldn't open clickhouse database")
 	eh.CheckCritical(db.Ping(context.Background()), "Couldn't reach clickhouse database")
 
-	go ConsumeFromKafka(db, "like_topic", "likes")
-	go ConsumeFromKafka(db, "view_topic", "views")
-
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *service_port))
 	eh.CheckCritical(err, "Failed to listen")
 
@@ -220,11 +175,4 @@ func main() {
 
 	fmt.Printf("Starting stat serving on port: %d\n", *service_port)
 	eh.CheckCritical(stat_server.Serve(lis), "stat_service")
-
-	// router := mux.NewRouter()
-	// router.HandleFunc("/stat/ping", server.Ping).Methods("GET")
-	// router.HandleFunc("/stat/likes/{post_id}", server.GetLikes).Methods("GET")
-
-	// fmt.Printf("Starting stat serving on port: %d\n", *service_port)
-	// eh.CheckCritical(http.ListenAndServe(fmt.Sprintf(":%d", *service_port), router), "stat_service")
 }

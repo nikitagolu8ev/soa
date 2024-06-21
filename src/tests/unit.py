@@ -142,7 +142,7 @@ class TestSocialNetworkMethods(unittest.TestCase):
         # print(r.status_code, r.content)
 
 
-    def test_like(self):
+    def test_like_view(self):
         cookies, user_id = self.login("login", "password")
 
         post_id = self.create_post("Post to like", "Content to like", cookies)
@@ -152,11 +152,11 @@ class TestSocialNetworkMethods(unittest.TestCase):
 
         cookies, _ = self.login("second login", "password")
 
-        self.like_post(post_id, user_id, cookies)
-        self.like_post(post_id, user_id, cookies)
+        self.view_post(post_id, user_id, cookies)
+        self.view_post(post_id, user_id, cookies)
 
 
-        time.sleep(1)
+        time.sleep(5)
 
         self.get_stats(post_id)
 
@@ -195,7 +195,7 @@ class TestSocialNetworkMethods(unittest.TestCase):
         self.like_post(forth_post_id, forth_author, cookies)
         self.like_post(sixth_post_id, forth_author, cookies)
 
-        time.sleep(1)
+        time.sleep(5)
 
         self.get_top_posts("likes")
         self.delete_post(forth_post_id, cookies)
@@ -242,7 +242,7 @@ class TestSocialNetworkMethods(unittest.TestCase):
         self.like_post(forth_post_id, forth_author, cookies)
         self.like_post(sixth_post_id, forth_author, cookies)
 
-        time.sleep(1)
+        time.sleep(5)
 
         self.get_top_authors()
         self.delete_post(forth_post_id, cookies)

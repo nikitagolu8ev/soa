@@ -355,10 +355,7 @@ func (server MainServer) LikePost(writer http.ResponseWriter, request *http.Requ
 	like.UserId = user_id
 	like.AuthorId = author_id
 
-	message_payload, err := json.Marshal(like)
-	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
-		return
-	}
+	message_payload := fmt.Sprint(post_id) + "," + fmt.Sprint(author_id) + "," + fmt.Sprint(user_id)
 
 	message := &sarama.ProducerMessage{Topic: "like_topic", Value: sarama.ByteEncoder(message_payload)}
 
@@ -396,10 +393,7 @@ func (server MainServer) ViewPost(writer http.ResponseWriter, request *http.Requ
 	view.AuthorId = author_id
 	view.UserId = user_id
 
-	message_payload, err := json.Marshal(view)
-	if eh.CheckHttp(err, "Json marshal error", http.StatusInternalServerError, writer) {
-		return
-	}
+	message_payload := fmt.Sprint(post_id) + "," + fmt.Sprint(author_id) + "," + fmt.Sprint(user_id)
 
 	message := &sarama.ProducerMessage{Topic: "view_topic", Value: sarama.ByteEncoder(message_payload)}
 
